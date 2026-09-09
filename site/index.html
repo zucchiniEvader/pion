@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pion — a local desktop GUI for PI</title>
+<meta name="description" content="Pion is a native desktop GUI for PI. It drives pi --mode rpc, renders the community extensions you already use, and never bundles its own prompts, skills or agents." />
+<meta name="theme-color" content="#ffffff" />
+<meta property="og:title" content="Pion — a local desktop GUI for PI" />
+<meta property="og:description" content="Native. No bundled prompts. Just the interface." />
+<meta property="og:image" content="https://zucchinievader.github.io/pion/assets/screenshot.png" />
+<link rel="icon" href="./assets/pion-logo.png" />
+<style>
+  :root {
+    --ink: #1d1d1f;
+    --ink2: #6e6e73;
+    --line: #e3e3e6;
+    --bg: #ffffff;
+    --panel: #f7f7f8;
+    --accent: #0071e3;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: 940px; margin: 0 auto; padding: 0 24px; }
+  code, pre {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+    font-size: 13px;
+  }
+
+  /* language switching */
+  body[data-lang="en"] .zh { display: none; }
+  body[data-lang="zh"] .en { display: none; }
+
+  header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 20px 0; border-bottom: 0.5px solid var(--line);
+  }
+  header img { width: 28px; height: 28px; border-radius: 7px; }
+  header .name { font-weight: 600; letter-spacing: -0.01em; }
+  header nav { margin-left: auto; display: flex; align-items: center; gap: 18px; font-size: 14px; }
+  header nav a { color: var(--ink2); }
+  #lang {
+    border: 0.5px solid var(--line); background: var(--bg); color: var(--ink2);
+    border-radius: 8px; padding: 5px 10px; font: inherit; font-size: 13px; cursor: pointer;
+  }
+  #lang:hover { background: var(--panel); color: var(--ink); }
+
+  .hero { padding: 72px 0 8px; text-align: center; }
+  .hero h1 {
+    margin: 0 0 16px; font-size: clamp(30px, 5vw, 46px);
+    line-height: 1.15; letter-spacing: -0.02em; font-weight: 600;
+  }
+  .hero p.lede {
+    margin: 0 auto 32px; max-width: 620px;
+    font-size: clamp(16px, 2.2vw, 19px); color: var(--ink2);
+  }
+  .cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 12px 22px; border-radius: 980px; font-size: 15px; font-weight: 500;
+    border: 0.5px solid var(--line); color: var(--ink); background: var(--bg);
+    transition: background .15s ease, transform .15s ease;
+  }
+  .btn:hover { text-decoration: none; background: var(--panel); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { background: #0062c4; }
+  .hero .meta { margin-top: 18px; font-size: 13px; color: var(--ink2); }
+
+  .shot { margin: 44px 0 0; }
+  .shot img {
+    width: 100%; height: auto; display: block;
+    border: 0.5px solid var(--line); border-radius: var(--radius);
+    box-shadow: 0 18px 50px rgba(0, 0, 0, .09);
+  }
+
+  section { padding: 72px 0 0; }
+  section h2 {
+    margin: 0 0 10px; font-size: 24px; letter-spacing: -0.01em; font-weight: 600;
+  }
+  section p.sub { margin: 0 0 32px; color: var(--ink2); }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1px; background: var(--line); border: 0.5px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+  .card { background: var(--bg); padding: 22px 22px 24px; }
+  .card h3 { margin: 0 0 6px; font-size: 15px; font-weight: 600; }
+  .card p { margin: 0; font-size: 14px; color: var(--ink2); }
+  .card .tag { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 6px; background: var(--panel); border: 0.5px solid var(--line); font-size: 11px; color: var(--ink2); vertical-align: 1px; }
+
+  .principles { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 28px; }
+  .principles h3 { margin: 0 0 6px; font-size: 15px; font-weight: 600; }
+  .principles p { margin: 0; font-size: 14px; color: var(--ink2); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 12px 14px; border-bottom: 0.5px solid var(--line); vertical-align: top; }
+  th { font-weight: 600; font-size: 13px; color: var(--ink2); }
+  td code { background: var(--panel); padding: 1px 6px; border-radius: 5px; }
+
+  pre {
+    margin: 0; padding: 18px 20px; overflow-x: auto;
+    background: var(--panel); border: 0.5px solid var(--line); border-radius: var(--radius);
+  }
+
+  footer {
+    margin-top: 88px; padding: 28px 0 56px;
+    border-top: 0.5px solid var(--line);
+    display: flex; gap: 16px; flex-wrap: wrap; align-items: center;
+    font-size: 13px; color: var(--ink2);
+  }
+  footer nav { margin-left: auto; display: flex; gap: 18px; }
+  footer a { color: var(--ink2); }
+</style>
+</head>
+<body data-lang="en">
+<div class="wrap">
+
+  <header>
+    <img src="./assets/pion-logo.png" alt="Pion" />
+    <span class="name">Pion</span>
+    <nav>
+      <a href="https://github.com/zucchiniEvader/pion">GitHub</a>
+      <a href="https://github.com/zucchiniEvader/pion/releases/latest"><span class="en">Download</span><span class="zh">下载</span></a>
+      <button id="lang" type="button">中文</button>
+    </nav>
+  </header>
+
+  <div class="hero">
+    <h1>
+      <span class="en">A local desktop GUI for PI</span>
+      <span class="zh">PI 的本地桌面 GUI</span>
+    </h1>
+    <p class="lede">
+      <span class="en">Native. No bundled prompts, skills or agents. It drives <code>pi --mode rpc</code> and renders the community extensions you already use.</span>
+      <span class="zh">原生接入，不夹带任何 prompt、skill 或 Agent 行为。它通过 <code>pi --mode rpc</code> 驱动，只负责把你已装的社区扩展渲染出来。</span>
+    </p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/zucchiniEvader/pion/releases/latest">
+        <span class="en">Download for macOS</span><span class="zh">下载 macOS 版</span>
+      </a>
+      <a class="btn" href="https://github.com/zucchiniEvader/pion">GitHub</a>
+    </div>
+    <p class="meta">
+      <span class="en">macOS (Apple Silicon) · MIT · requires the <code>pi</code> CLI</span>
+      <span class="zh">macOS（Apple Silicon）· MIT · 需要已安装 <code>pi</code> CLI</span>
+    </p>
+  </div>
+
+  <div class="shot">
+    <img src="./assets/screenshot.png" alt="Pion: sidebar with projects and sessions, conversation stream, composer with model picker" />
+  </div>
+
+  <section>
+    <h2><span class="en">What it does</span><span class="zh">它能做什么</span></h2>
+    <p class="sub">
+      <span class="en">The interface PI is missing — nothing more.</span>
+      <span class="zh">PI 缺的那层界面，仅此而已。</span>
+    </p>
+    <div class="grid">
+      <div class="card">
+        <h3><span class="en">Multi-session workbench</span><span class="zh">多会话工作台</span></h3>
+        <p><span class="en">Projects → sessions, up to four pooled runtimes, streaming output, tool cards with expandable arguments and results, pasted screenshots, steer and abort mid-run.</span><span class="zh">项目 → 会话，最多 4 个 runtime 池化复用，流式输出、工具卡（参数与结果可展开）、截图直接粘贴、运行中 steer / abort。</span></p>
+      </div>
+      <div class="card">
+        <h3><span class="en">Community extensions, rendered natively</span><span class="zh">社区扩展原生适配</span></h3>
+        <p><span class="en">Todo panel, plan-mode cards and goal commands get purpose-built UI. Anything unrecognized falls back to a generic tool card — no blank screens, no dropped events.</span><span class="zh">todo 面板、plan 卡片、goal 命令都有专属 UI；未识别的工具走通用卡片，不白屏、不丢事件。</span></p>
+      </div>
+      <div class="card">
+        <h3><span class="en">Extension UI</span><span class="zh">扩展 UI 响应</span></h3>
+        <p><span class="en">Select, confirm, input and notify prompts from extensions appear as native cards — click to answer.</span><span class="zh">扩展弹出的 select / confirm / input / notify 以原生卡片呈现，直接点选即可。</span></p>
+      </div>
+      <div class="card">
+        <h3><span class="en">Slash commands</span><span class="zh">Slash 命令补全</span></h3>
+        <p><span class="en">Type <code>/</code> to browse commands, prompt templates and skills from your own PI setup, with the source labeled.</span><span class="zh">输入 <code>/</code> 列出你已安装的扩展命令、prompt 模板和 skill，来源一目了然。</span></p>
+      </div>
+      <div class="card">
+        <h3><span class="en">Models &amp; thinking</span><span class="zh">模型与思考等级</span></h3>
+        <p><span class="en">Read straight from your PI model catalog; switch model or thinking level mid-session.</span><span class="zh">直接读 PI 的模型目录，会话内随时切换模型与思考等级。</span></p>
+      </div>
+      <div class="card">
+        <h3><span class="en">Git context</span><span class="zh">Git 上下文</span></h3>
+        <p><span class="en">See branches and worktrees, create a worktree in one click, open the project in Finder, Ghostty or VS Code.</span><span class="zh">查看分支与 worktree、一键创建、在 Finder / Ghostty / VS Code 中打开项目。</span></p>
+      </div>
+      <div class="card">
+        <h3><span class="en">Task board</span><span class="zh">任务看板</span><span class="tag">optional</span></h3>
+        <p><span class="en">Create a card, dispatch it to an agent, review the result. State lives in the project's own event log, and nothing is written until you use it.</span><span class="zh">建卡 → 派发给 Agent → 审核结果。状态写在项目自己的事件日志里，不用就不写入任何文件。</span></p>
+      </div>
+      <div class="card">
+        <h3><span class="en">Remote runtime</span><span class="zh">Remote runtime</span><span class="tag">beta</span></h3>
+        <p><span class="en">Install <code>pion-daemon</code> on another machine and use its projects as if they were local.</span><span class="zh">在另一台机器上装 <code>pion-daemon</code>，把它的项目接进来，像本地项目一样用。</span></p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="en">Your PI, unchanged</span><span class="zh">你的 PI，原样不动</span></h2>
+    <p class="sub">
+      <span class="en">Pion is a window, not a fork.</span>
+      <span class="zh">Pion 是一个窗口，不是一份分支。</span>
+    </p>
+    <div class="principles">
+      <div>
+        <h3><span class="en">Native PI</span><span class="zh">原生 PI</span></h3>
+        <p><span class="en">Everything goes through <code>pi --mode rpc</code>. No TUI scraping, no reimplemented agent runtime.</span><span class="zh">全部走 <code>pi --mode rpc</code>，不解析 TUI 屏幕，不重写 Agent Runtime。</span></p>
+      </div>
+      <div>
+        <h3><span class="en">No bundled opinions</span><span class="zh">零私货</span></h3>
+        <p><span class="en">No author prompts, skills or extensions ship with the app. Your environment is what you see.</span><span class="zh">不自带作者的 prompt、skill 或 extension。你装了什么，界面就显示什么。</span></p>
+      </div>
+      <div>
+        <h3><span class="en">Your history stays PI's</span><span class="zh">历史就是 PI 的历史</span></h3>
+        <p><span class="en">PI session JSONL is the only source of truth. No second transcript database, nothing to migrate away from.</span><span class="zh">PI session JSONL 是唯一真相来源，不建第二份 transcript 库，随时可以卸载。</span></p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="en">Adapted community extensions</span><span class="zh">社区扩展适配</span></h2>
+    <p class="sub">
+      <span class="en">The list grows with what you have installed.</span>
+      <span class="zh">适配列表跟随你本地已安装的扩展持续补齐。</span>
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th><span class="en">Extension</span><span class="zh">扩展</span></th>
+          <th><span class="en">In Pion</span><span class="zh">在 Pion 里</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>@juicesharp/rpiv-todo</code></td>
+          <td><span class="en">Live task panel above the composer.</span><span class="zh">输入框上方的任务面板，实时跟随 todo 快照。</span></td>
+        </tr>
+        <tr>
+          <td><code>@narumitw/pi-plan-mode</code></td>
+          <td><span class="en">Dedicated question and plan cards, plus <code>/plan</code> state.</span><span class="zh">专属问题与计划卡片，以及 <code>/plan</code> 状态提示。</span></td>
+        </tr>
+        <tr>
+          <td><code>@narumitw/pi-goal</code></td>
+          <td><span class="en"><code>/goal</code> commands and the <code>goal_*</code> tools work as-is.</span><span class="zh"><code>/goal</code> 命令与 <code>goal_*</code> 工具正常可用。</span></td>
+        </tr>
+        <tr>
+          <td><span class="en">anything else</span><span class="zh">其他扩展</span></td>
+          <td><span class="en">Generic tool card with expandable arguments and results.</span><span class="zh">通用工具卡，参数与结果可展开。</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2><span class="en">Quick start</span><span class="zh">快速开始</span></h2>
+    <p class="sub">
+      <span class="en">Requires macOS (Apple Silicon), Node 18+ and the <code>pi</code> CLI.</span>
+      <span class="zh">前置：macOS（Apple Silicon）、Node 18+、已安装 <code>pi</code> CLI。</span>
+    </p>
+<pre>git clone https://github.com/zucchiniEvader/pion.git
+cd pion
+npm install
+npm run dev        # run in development
+npm run dist       # build a dmg</pre>
+  </section>
+
+  <footer>
+    <span>MIT License</span>
+    <span>·</span>
+    <a href="https://pi.dev">PI</a>
+    <nav>
+      <a href="https://github.com/zucchiniEvader/pion">GitHub</a>
+      <a href="https://github.com/zucchiniEvader/pion/blob/main/README_CN.md"><span class="en">中文说明</span><span class="zh">README</span></a>
+      <a href="https://github.com/zucchiniEvader/pion/releases/latest"><span class="en">Releases</span><span class="zh">发布</span></a>
+    </nav>
+  </footer>
+
+</div>
+
+<script>
+  (function () {
+    var KEY = 'pion-lang'
+    var stored = null
+    try { stored = localStorage.getItem(KEY) } catch (e) {}
+    var lang = stored || ((navigator.language || '').toLowerCase().indexOf('zh') === 0 ? 'zh' : 'en')
+    var btn = document.getElementById('lang')
+
+    function apply(next) {
+      document.body.dataset.lang = next
+      document.documentElement.lang = next === 'zh' ? 'zh-CN' : 'en'
+      btn.textContent = next === 'zh' ? 'EN' : '中文'
+      try { localStorage.setItem(KEY, next) } catch (e) {}
+    }
+
+    btn.addEventListener('click', function () {
+      apply(document.body.dataset.lang === 'zh' ? 'en' : 'zh')
+    })
+    apply(lang)
+  })()
+</script>
+</body>
+</html>

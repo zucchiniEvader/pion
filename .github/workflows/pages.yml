@@ -1,0 +1,38 @@
+name: pages
+
+# Landing page → https://zucchinievader.github.io/pion/
+# 只发布 site/,图片在构建时从 assets/ 拷进去,不在仓库里存副本。
+# 注意:不要用仓库的 /docs 作为 Pages 源,那个目录是内部文档且被 gitignore。
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - 'assets/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+      - run: mkdir -p site/assets && cp assets/pion-logo.png assets/screenshot.png site/assets/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4
