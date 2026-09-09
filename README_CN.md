@@ -6,6 +6,7 @@
     <a href="README.md">English</a> | <a href="README_CN.md">简体中文</a>
   </p>
   <p>
+    <img alt="ci" src="https://github.com/zucchiniEvader/pion/actions/workflows/ci.yml/badge.svg" />
     <img alt="platform" src="https://img.shields.io/badge/platform-macOS%20(Apple%20Silicon)-black" />
     <img alt="license" src="https://img.shields.io/badge/license-MIT-blue" />
     <img alt="status" src="https://img.shields.io/badge/remote%20runtime-beta-orange" />
