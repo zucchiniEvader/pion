@@ -1,0 +1,33 @@
+name: release
+
+# 推 tag（v0.1.0）触发：打 dmg → 签名 + 公证（凭据来自 secrets）→ 发布 Release。
+# 应用内「检查更新」读的就是 releases/latest 的 tag，所以 tag 必须是 v<package.json version>，
+# 且发布后不能标成 prerelease，否则 GUI 永远认为已是最新。
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  build:
+    runs-on: macos-14 # arm64 runner，Intel runner 打不出 arm64 的 Electron
+    permissions:
+      contents: write # gh release create 需要
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      # secrets 缺失时 electron-builder 跳过签名与公证并打日志，产物仍可用但会被 Gatekeeper 拦
+      - run: npm run dist
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      # GH_TOKEN 只给这一步：构建阶段不带它，electron-builder 就不会自作主张去 publish
+      - run: gh release create "$GITHUB_REF_NAME" release/*.dmg release/pion-daemon.cjs --generate-notes --title "Pion ${GITHUB_REF_NAME#v}"
+        env:
+          GH_TOKEN: ${{ github.token }}
