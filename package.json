@@ -28,8 +28,8 @@
     "test:daemon": "node scripts/daemon-cli-test.mjs && node scripts/daemon-ws-test.mjs && node scripts/daemon-dial-test.mjs && node scripts/daemon-pairing-test.mjs",
     "daemon:package": "node scripts/package-daemon.mjs",
     "postinstall": "node scripts/patch-dock-name.mjs",
-    "dist": "npm run build && electron-builder --mac --publish never && cp -f out/daemon/index.cjs release/pion-daemon.cjs",
-    "dist:dir": "npm run build && electron-builder --mac --dir --publish never && cp -f out/daemon/index.cjs release/pion-daemon.cjs"
+    "dist": "npm run build && electron-builder --mac --publish never",
+    "dist:dir": "npm run build && electron-builder --mac --dir --publish never"
   },
   "devDependencies": {
     "@base-ui/react": "^1.7.0",

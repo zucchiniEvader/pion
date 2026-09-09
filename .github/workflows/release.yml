@@ -28,6 +28,6 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       # GH_TOKEN 只给这一步：构建阶段不带它，electron-builder 就不会自作主张去 publish
-      - run: gh release create "$GITHUB_REF_NAME" release/*.dmg release/pion-daemon.cjs --generate-notes --title "Pion ${GITHUB_REF_NAME#v}"
+      - run: gh release create "$GITHUB_REF_NAME" release/*.dmg --generate-notes --title "Pion ${GITHUB_REF_NAME#v}"
         env:
           GH_TOKEN: ${{ github.token }}
