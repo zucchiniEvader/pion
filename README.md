@@ -15,6 +15,10 @@ Pion 给 [PI](https://pi.dev) 套了一层桌面界面，但**不替代 PI、不
 - **零私货**：不自带作者自己的 prompt、skill 或 extension。你机器上装了哪些社区扩展、模板和 skill，Pion 就渲染哪些——同一个 PI 环境，只是多了一个窗口。
 - **历史就是 PI 的历史**：PI 的 session JSONL 是对话唯一真相来源，Pion 不建第二份 transcript 库，卸载后你的数据原样留在 PI 里。
 
+<div align="center">
+  <img src="assets/screenshot.png" alt="Pion 界面：侧边栏项目与会话、主区对话流、底部输入框与模型选择" width="880" />
+</div>
+
 ## 现在能做什么
 
 - **多会话工作台**：项目 → 会话列表，最多 4 个 runtime 池化复用，流式输出、思考过程、工具调用卡片（参数与结果可展开）、截图直接粘贴、运行中 steer / abort。
