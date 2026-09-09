@@ -1,0 +1,60 @@
+{
+  "name": "pion",
+  "productName": "Pion",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pion — a local desktop home for PI",
+  "main": "out/main/index.js",
+  "author": {
+    "name": "Pion contributors"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zucchiniEvader/pion.git"
+  },
+  "homepage": "https://github.com/zucchiniEvader/pion",
+  "bugs": {
+    "url": "https://github.com/zucchiniEvader/pion/issues"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/build-daemon.mjs && electron-vite dev",
+    "build": "npm run typecheck && electron-vite build && node scripts/build-daemon.mjs",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "test:purity": "node scripts/run-purity-tests.mjs",
+    "test:i18n": "node scripts/check-i18n-strings.mjs",
+    "test:daemon": "node scripts/daemon-cli-test.mjs && node scripts/daemon-ws-test.mjs && node scripts/daemon-dial-test.mjs && node scripts/daemon-pairing-test.mjs",
+    "daemon:package": "node scripts/package-daemon.mjs",
+    "postinstall": "node scripts/patch-dock-name.mjs",
+    "dist": "npm run build && electron-builder --mac && cp -f out/daemon/index.cjs release/pion-daemon.cjs",
+    "dist:dir": "npm run build && electron-builder --mac --dir && cp -f out/daemon/index.cjs release/pion-daemon.cjs"
+  },
+  "devDependencies": {
+    "@base-ui/react": "^1.7.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.5",
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react": "^5.2.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "electron": "^33.2.0",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^3.0.0",
+    "esbuild": "^0.28.2",
+    "lucide-react": "^1.34.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "tailwind-merge": "^3.6.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.7.0",
+    "uqr": "^0.1.3",
+    "vite": "^6.0.0",
+    "ws": "^8.21.3"
+  }
+}

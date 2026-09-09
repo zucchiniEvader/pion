@@ -1,0 +1,329 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ─── Design tokens ──────────────────────────────────────────────────────
+   macOS-flavoured palette. Semantic names so components never hardcode
+   hex values; `.dark` (or the OS media query) swaps the same names.      */
+:root {
+  --canvas: #ffffff;            /* content background          */
+  --panel: #f5f5f7;             /* toolbars, sidebar, composer */
+  --raised: #ebebf0;            /* button fills, inset wells    */
+  --fill-hover: rgba(120, 120, 128, 0.10);
+  --fill-active: rgba(120, 120, 128, 0.16);
+  --line: rgba(0, 0, 0, 0.12);  /* hairline separators         */
+  --ink: #1d1d1f;
+  --ink2: #6e6e73;
+  /* Neutral accent in the same gray family as the fill tokens; the orange
+     identity was retired so selection/tints read like bg-fill-hover. */
+  --accent: #007aff;
+  --accent-hover: #2b8eff;
+  --accent-press: #0069d9;
+  --ok: #34c759;
+  --warn: #c93400;
+  --bad: #ff3b30;
+  --info: #0071e3;              /* stage: todo   */
+  --purple: #a550d6;            /* stage: review */
+  --tint-accent: rgba(0, 122, 255, 0.10);
+  --tint-ok: rgba(52, 199, 89, 0.12);
+  --tint-warn: rgba(255, 149, 0, 0.14);
+  --tint-bad: rgba(255, 59, 48, 0.10);
+  --thumb: rgba(0, 0, 0, 0.28);
+  --shadow-card: 0 0 0 0.5px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-pop:
+    0 0 0 0.5px rgba(0, 0, 0, 0.08),
+    0 12px 32px -8px rgba(22, 23, 24, 0.28),
+    0 4px 12px -4px rgba(22, 23, 24, 0.18);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --canvas: #1e1e20;
+    --panel: #262628;
+    --raised: #333336;
+    --fill-hover: rgba(120, 120, 128, 0.22);
+    --fill-active: rgba(120, 120, 128, 0.34);
+    --line: rgba(255, 255, 255, 0.13);
+    --ink: #f5f5f7;
+    --ink2: #98989d;
+    --accent: #98989d;
+    --accent-hover: #a2a2a7;
+    --accent-press: #8a8a8f;
+    --ok: #30d158;
+    --warn: #ff9f0a;
+    --bad: #ff453a;
+    --info: #0a84ff;
+    --purple: #bf5af2;
+    --tint-accent: rgba(10, 132, 255, 0.22);
+    --tint-ok: rgba(48, 209, 88, 0.20);
+    --tint-warn: rgba(255, 159, 10, 0.22);
+    --tint-bad: rgba(255, 69, 58, 0.20);
+    --thumb: rgba(255, 255, 255, 0.30);
+    --shadow-card: 0 0 0 0.5px rgba(255, 255, 255, 0.05), 0 1px 3px rgba(0, 0, 0, 0.35);
+    --shadow-pop:
+      0 0 0 0.5px rgba(255, 255, 255, 0.10),
+      0 12px 32px -8px rgba(0, 0, 0, 0.60),
+      0 4px 12px -4px rgba(0, 0, 0, 0.50);
+  }
+}
+:root.dark {
+  --canvas: #1e1e20;
+  --panel: #262628;
+  --raised: #333336;
+  --fill-hover: rgba(120, 120, 128, 0.22);
+  --fill-active: rgba(120, 120, 128, 0.34);
+  --line: rgba(255, 255, 255, 0.13);
+  --ink: #f5f5f7;
+  --ink2: #98989d;
+  --accent: #0a84ff;
+  --accent-hover: #3c9dff;
+  --accent-press: #0069d9;
+  --ok: #30d158;
+  --warn: #ff9f0a;
+  --bad: #ff453a;
+  --info: #0a84ff;
+  --purple: #bf5af2;
+  --tint-accent: rgba(10, 132, 255, 0.22);
+  --tint-ok: rgba(48, 209, 88, 0.20);
+  --tint-warn: rgba(255, 159, 10, 0.22);
+  --tint-bad: rgba(255, 69, 58, 0.20);
+  --thumb: rgba(255, 255, 255, 0.30);
+  --shadow-card: 0 0 0 0.5px rgba(255, 255, 255, 0.05), 0 1px 3px rgba(0, 0, 0, 0.35);
+  --shadow-pop:
+    0 0 0 0.5px rgba(255, 255, 255, 0.10),
+    0 12px 32px -8px rgba(0, 0, 0, 0.60),
+    0 4px 12px -4px rgba(0, 0, 0, 0.50);
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-panel: var(--panel);
+  --color-raised: var(--raised);
+  --color-fill-hover: var(--fill-hover);
+  --color-fill-active: var(--fill-active);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-ink2: var(--ink2);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-press: var(--accent-press);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-bad: var(--bad);
+  --color-info: var(--info);
+  --color-purple: var(--purple);
+  --color-tint-accent: var(--tint-accent);
+  --color-tint-ok: var(--tint-ok);
+  --color-tint-warn: var(--tint-warn);
+  --color-tint-bad: var(--tint-bad);
+
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue',
+    'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'SFMono-Regular', Menlo, Consolas, monospace;
+
+  --shadow-card: var(--shadow-card);
+  --shadow-pop: var(--shadow-pop);
+}
+
+/* ─── Base ─────────────────────────────────────────────────────────────── */
+
+html {
+  color-scheme: light dark;
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  /* Desktop apps deselect chrome text by default; content opts back in. */
+  user-select: none;
+  cursor: default;
+}
+
+#root { height: 100%; }
+
+input, textarea { user-select: text; }
+select-text, .select-text { user-select: text; }
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  cursor: default;
+}
+
+::selection { background: var(--tint-accent); }
+
+/* Overlay-style slim scrollbars — one of the strongest desktop tells. */
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--thumb);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover { border-width: 1px; }
+
+/* Sidebar scrolls without a scrollbar: a styled webkit scrollbar takes layout
+   space, so its appearance on overflow would squeeze every session row and
+   reflow the list each time a project expands or collapses. Wheel, trackpad,
+   and keyboard scrolling are unaffected. */
+.sidebar-scroll { scrollbar-width: none; }
+.sidebar-scroll::-webkit-scrollbar { display: none; }
+
+/* OverlayScrollArea's scroll element: the native scrollbar must never take
+   layout width — the component's own overlay thumb is the scrollbar. */
+.overlay-scrollarea { scrollbar-width: none; }
+.overlay-scrollarea::-webkit-scrollbar { display: none; }
+
+/* The sidebar's overlay thumb: visible while scrolling or grabbed, floats
+   over the content's right edge, never takes layout width. */
+.overlay-scrollbar {
+  position: absolute;
+  right: 2px;
+  width: 6px;
+  border-radius: 999px;
+  background: var(--thumb);
+  opacity: 0;
+  transition: opacity 180ms;
+  cursor: default;
+  touch-action: none;
+  z-index: 10;
+}
+.overlay-scrollbar-on { opacity: 1; }
+.overlay-scrollbar:hover { background: color-mix(in srgb, var(--thumb) 60%, var(--ink)); }
+
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+/* Text fields signal focus through their container's border/halo instead;
+   a second ring directly around the field reads as a doubled border. */
+input:focus-visible,
+textarea:focus-visible {
+  box-shadow: none;
+}
+
+/* Window drag regions (titleBarStyle hiddenInset). */
+.drag { -webkit-app-region: drag; }
+.no-drag, button, input, textarea, select, a { -webkit-app-region: no-drag; }
+
+/* Room for macOS inset traffic lights inside draggable toolbars. */
+html.mac .traffic-inset { padding-left: 80px; }
+html.mac .traffic-inset-tight { padding-left: 68px; }
+
+/* Keycap chip for keyboard-shortcut hints (sidebar ⌘N). */
+.kbd {
+  border: 0.5px solid var(--line);
+  background: var(--canvas);
+  color: var(--ink2);
+  border-radius: 5px;
+  padding: 1.5px 6px;
+  font-size: 11.5px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+/* ─── Markdown transcript text (assistant replies) ─────────────────────── */
+
+.md {
+  font-size: 15px;
+  line-height: 1.55;
+}
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md p { margin: 6px 0; }
+.md h1, .md h2, .md h3, .md h4, .md h5, .md h6 {
+  margin: 14px 0 6px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.md h1 { font-size: 17px; }
+.md h2 { font-size: 16px; }
+.md h3, .md h4, .md h5, .md h6 { font-size: 15px; }
+.md ul, .md ol { margin: 6px 0; padding-left: 20px; }
+.md ul { list-style: disc; }
+.md ol { list-style: decimal; }
+.md li { margin: 2px 0; }
+.md li > ul, .md li > ol { margin: 2px 0; }
+.md li > input[type='checkbox'] { margin-right: 6px; }
+.md blockquote {
+  margin: 6px 0;
+  padding: 2px 12px;
+  border-left: 2px solid var(--line);
+  color: var(--ink2);
+}
+.md hr { margin: 12px 0; border: none; border-top: 0.5px solid var(--line); }
+.md a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.md :not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  background: var(--raised);
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+.md pre {
+  margin: 8px 0;
+  padding: 10px 12px;
+  overflow-x: auto;
+  background: var(--panel);
+  border: 0.5px solid var(--line);
+  border-radius: 8px;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.md pre code {
+  font-family: inherit;
+  font-size: inherit;
+  background: none;
+  padding: 0;
+  border-radius: 0;
+}
+.md table {
+  margin: 8px 0;
+  max-width: 100%;
+  width: max-content;
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+.md th, .md td {
+  border: 0.5px solid var(--line);
+  padding: 4px 10px;
+  text-align: left;
+}
+.md th { background: var(--panel); font-weight: 600; }
+.md img { max-width: 100%; border-radius: 8px; }
+
+/* ─── Motion ───────────────────────────────────────────────────────────── */
+
+.streaming-cursor { animation: blink 1s steps(2) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+
+.toast-in { animation: toast-in 180ms ease-out both; }
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.dialog-in { animation: dialog-in 140ms cubic-bezier(0.2, 0.9, 0.3, 1) both; }
+@keyframes dialog-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

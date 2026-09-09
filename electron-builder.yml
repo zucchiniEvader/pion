@@ -1,0 +1,38 @@
+# electron-builder 配置:产物输出到 release/(`npm run dist`)。
+# 运行时依赖为空(renderer 依赖已由 electron-vite 打进 bundle,main 无外部依赖),
+# 包内不含 node_modules;userData/缓存都走 app.getPath('userData'),与包分离。
+appId: com.pion.app
+productName: Pion
+# 钉住代码身份,否则每次重打包本地网络等 TCC 授权都失效(见 afterPack.cjs)
+afterPack: scripts/afterPack.cjs
+directories:
+  output: release
+files:
+  - out/**
+  - assets/**
+  - package.json
+# kanban-bridge 扩展按 process.resourcesPath 定位(见 index.ts kanbanBridgePath),
+# 必须落在 Pion.app/Contents/Resources/ 下,供 pi 子进程以普通文件读取
+extraResources:
+  - from: resources/kanban-bridge.ts
+    to: kanban-bridge.ts
+  - from: resources/pion-commands.ts
+    to: pion-commands.ts
+  # 单文件 daemon bundle:Settings 配对流程让用户把它拷到远程机器
+  # (dev 态 main 会从 out/daemon/index.cjs 另存一份到 userData,二者内容一致)
+  - from: out/daemon/index.cjs
+    to: pion-daemon.cjs
+npmRebuild: false
+mac:
+  category: public.app-category.developer-tools
+  icon: assets/pion-logo.png
+  # 签名身份故意不写在这里(会带个人姓名/Team ID):本机证书在钥匙串时
+  # electron-builder 自动发现,CI 走 CSC_LINK + CSC_KEY_PASSWORD。
+  # 无凭据时跳过签名,afterPack 补 ad-hoc,本地构建不失败。
+  # notarize 同理:环境变量缺失时自动跳过并打日志(见 CONTRIBUTING.md)。
+  notarize: true
+  target:
+    - target: dmg
+      arch: [arm64]
+dmg:
+  artifactName: Pion-${version}-${arch}.${ext}

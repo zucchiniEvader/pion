@@ -1,0 +1,11 @@
+node_modules
+out
+dist
+.DS_Store
+*.log
+.zcode/
+.pion/
+release/
+.pi/quiet-tools/
+# 本地 git worktree(整份仓库副本,不要提交)
+.worktree/
