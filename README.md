@@ -1,7 +1,10 @@
 <div align="center">
   <img src="assets/pion-logo.png" alt="Pion" width="96" />
   <h1>Pion</h1>
-  <p><strong>PI 的本地桌面 GUI —— 原生、零私货、只做界面。</strong></p>
+  <p><strong>A native desktop GUI for PI — Native, focused, and ready out of the box.</strong></p>
+  <p>
+    <a href="README.md">English</a> | <a href="README_CN.md">简体中文</a>
+  </p>
   <p>
     <img alt="platform" src="https://img.shields.io/badge/platform-macOS%20(Apple%20Silicon)-black" />
     <img alt="license" src="https://img.shields.io/badge/license-MIT-blue" />
@@ -9,74 +12,93 @@
   </p>
 </div>
 
-Pion 给 [PI](https://pi.dev) 套了一层桌面界面，但**不替代 PI、不重写 Agent Runtime、不发明自己的 Agent 行为**。
+Pion is a dedicated local desktop client for [PI](https://pi.dev). Designed to work directly alongside the official Agent Runtime, Pion focuses on delivering an intuitive, efficient desktop experience for session management and real-time interaction.
 
-- **原生 PI**：通过 `pi --mode rpc` 驱动，不解析 TUI 屏幕，不改 PI 的运行方式。
-- **零私货**：不自带作者自己的 prompt、skill 或 extension。你机器上装了哪些社区扩展、模板和 skill，Pion 就渲染哪些——同一个 PI 环境，只是多了一个窗口。
-- **历史就是 PI 的历史**：PI 的 session JSONL 是对话唯一真相来源，Pion 不建第二份 transcript 库，卸载后你的数据原样留在 PI 里。
+- **Official RPC-Driven**: Communicates via standard `pi --mode rpc` process pipelines, preserving the official runtime behavior and execution environment.
+- **Seamless Environment Reuse**: Directly inherits your existing local PI configuration, community extensions, prompt templates, and skills — sharing the exact same environment with the CLI.
+- **Single Source of Truth**: Uses PI's session JSONL directly as the conversation history truth source, keeping all conversation data cleanly inside your local PI setup.
 
 <div align="center">
-  <img src="assets/screenshot.png" alt="Pion 界面：侧边栏项目与会话、主区对话流、底部输入框与模型选择" width="880" />
+  <img src="assets/screenshot.png" alt="Pion Interface: sidebar projects & sessions, main conversation stream, input box and model picker" width="880" />
 </div>
 
-## 现在能做什么
+## Features
 
-- **多会话工作台**：项目 → 会话列表，最多 4 个 runtime 池化复用，流式输出、思考过程、工具调用卡片（参数与结果可展开）、截图直接粘贴、运行中 steer / abort。
-- **社区扩展原生适配**：见下表。未识别的工具走通用卡片，不白屏、不丢事件。
-- **扩展 UI 响应**：扩展弹出的 select / confirm / input / notify 以原生卡片呈现，直接点选即可。
-- **Slash 命令补全**：输入 `/` 列出你已安装的扩展命令、prompt 模板和 skill，来源一目了然。
-- **模型与思考等级**：直接读 PI 的模型目录，会话内随时切换。
-- **Git 上下文**：查看分支与 worktree、一键创建 worktree、在 Finder / Ghostty / VS Code 中打开项目。
-- **设置中心**：界面语言（中文 / English）、主题（跟随系统 / 浅色 / 深色）、Providers（读取 `~/.pi/agent/models.json`，可设默认模型）、检查并更新 PI 与扩展、Runtimes 管理。
-- **崩溃可恢复**：PI 意外退出时，会话可一键恢复。
+- **Multi-Session Workspace**: Fast switching between projects and sessions with an automated pool of up to 4 runtimes; supports streaming output, thought process visibility, expandable tool call cards (arguments and results), clipboard image pasting, and in-flight steering / aborting.
+- **Native Extension Interactions**: Renders interactive prompts from extensions (Select, Confirm, Input, Notify) as native UI cards for direct point-and-click action.
+- **Slash Commands & Auto-completion**: Type `/` to instantly access installed extension commands, prompt templates, and skills with clear provenance tags.
+- **Model & Reasoning Control**: Automatically reads `~/.pi/agent/models.json`, allowing instant model switching and thinking level adjustments per session.
+- **Git & Worktree Integration**: Visual overview of branches and worktrees, one-click creation of dedicated worktrees, and quick opening in Finder, Ghostty, or VS Code.
+- **Settings & Environment Management**: Switch between English/Chinese and dark/light themes, check and update PI and extensions, and monitor runtime statuses.
+- **Session Crash Resilience**: Provides one-click reconnection and recovery if an underlying runtime process terminates unexpectedly.
 
-## 社区扩展适配
+## Community Extension Support
 
-适配列表跟随你本地已安装的社区扩展持续补齐，目前已完成：
+Pion automatically detects installed extensions in your local environment and renders tailored UI components:
 
-| 扩展 | 在 Pion 里的表现 |
+| Extension | Integration in Pion |
 | --- | --- |
-| `@juicesharp/rpiv-todo` | 输入框上方的任务面板，实时跟随当前会话的 todo 快照 |
-| `@narumitw/pi-plan-mode` | `plan_mode_question` / `plan_mode_complete` 专属卡片，`/plan` 状态提示与流程 |
-| `@narumitw/pi-goal` | `/goal` 命令与 `goal_complete` / `goal_blocked` / `goal_wait` 工具正常可用 |
-| 其他扩展 | 通用工具卡，参数与结果可展开；不识别也不会丢事件 |
+| `@juicesharp/rpiv-todo` | Persistent task panel above the input area, dynamically syncing session todo snapshots and progress |
+| `@narumitw/pi-plan-mode` | Dedicated interactive cards for `plan_mode_question` and `plan_mode_complete`, with clear `/plan` workflow feedback |
+| `@narumitw/pi-goal` | Full support for the `/goal` command and `goal_complete` / `goal_blocked` / `goal_wait` lifecycle transitions |
+| Other Extensions | Universal tool cards with collapsible argument/result views, faithfully presenting all execution events |
 
-## 任务看板（可选）
+## Task Kanban (Optional)
 
-把任务从「想到」推到「做完」的一条闭环：**建卡 → 派发给 Agent → Agent 执行并回报 → 自动进入 Review → 你审核 Done / Reopen**。卡片与执行状态写在项目自己的 `.pion/kanban/events.jsonl` 事件日志里，终端里跑 `pi` 也能读写同一块看板。
+A lightweight execution loop from idea to completion: **Create Card → Dispatch to Agent → Agent Executes & Reports → Review Phase → Human Verification (Done / Reopen)**.
 
-看板是**可选功能**：不用就不向你的项目写入任何文件，也可以随时从侧边栏关闭看板视图。
+- **Event-Driven Storage**: State is persisted in your project's own `.pion/kanban/events.jsonl`, allowing both CLI `pi` and the GUI to collaborate on the same board.
+- **On-Demand Usage**: Only writes logs when the Kanban feature is actively used; the board view can be toggled on or off from the sidebar at any time.
 
-## Remote runtime（Beta）
+## Remote Runtime (Beta)
 
-在另一台机器上装一个 `pion-daemon`，就能把它的项目接进 Pion，像本地项目一样用会话、流式输出和看板。支持配对码、手动 host/port/token，以及给移动客户端扫码连接（配套 iOS 客户端暂未开源）。功能已可用，仍在 Beta 阶段，欢迎反馈。
+Connect remote machines running `pion-daemon` into your desktop Pion instance, enjoying the same multi-session, streaming, and Kanban experience as local projects.
 
-## 即将支持
+- Connect via pairing codes, token authentication, or local network direct connection.
+- Supports QR code pairing for mobile clients (companion iOS client in development).
 
-- **文件变更查看**：diff 视图，直接在 GUI 里审阅 Agent 改了什么。
-- **终端**：独立终端面板，与 PI RPC 通道互不干扰。
+## Roadmap
 
-## 快速开始
+- **File Diff Viewer**: Inspect Agent code modifications directly within the GUI.
+- **Integrated Terminal Panel**: Built-in terminal running independently from the PI RPC communication channel.
 
-前置：macOS（Apple Silicon）、Node 18+、已安装 `pi` CLI。
+## Getting Started
+
+### Prerequisites
+
+- macOS (Apple Silicon)
+- Node.js 18+
+- Installed and configured [`pi`](https://pi.dev) CLI
+
+### Installation & Run
 
 ```bash
-git clone https://github.com/zucchiniEvader/pion.git && cd pion
+# Clone the repository
+git clone https://github.com/zucchiniEvader/pion.git
+cd pion
+
+# Install dependencies
 npm install
-npm run dev        # 开发模式启动
-npm run dist       # 打包 dmg（release/Pion-<version>-arm64.dmg）
-npm run dist:dir   # 快速产出未压缩的 release/mac-arm64/Pion.app
+
+# Start development mode
+npm run dev
+
+# Build DMG package
+npm run dist
+
+# Quick unpackaged build (macOS .app)
+npm run dist:dir
 ```
 
-首次启动会自动检测 PI 环境；选择本地项目文件夹即可开始。
+On first launch, Pion automatically detects your local PI environment. Simply select a project folder to start.
 
-## 边界
+## Design Principles
 
-- 只支持 PI，不接其他 Agent，不做 ACP。
-- 不解析 PI 的 TUI 屏幕，主通信只走 `pi --mode rpc`。
-- 不自动信任项目内的 resources，不静默传递 `--approve`。
-- 远程访问目前定位为内网自托管，不做公网暴露与云同步。
+- **Dedicated to the PI Ecosystem**: Focused on building a deeply tailored desktop experience for PI while keeping the application lightweight and clean.
+- **Standard Protocol Communication**: Built strictly on the official `pi --mode rpc` JSONL pipe protocol for maximum stability and transparent communication.
+- **Explicit Authorization**: Preserves explicit user consent and clear safety boundaries for all execution privileges and resource access.
+- **Local & Self-Hosted First**: All data storage and communication remain entirely under user control, safeguarding project source code and conversational privacy.
 
 ## License
 
-[MIT](LICENSE)。参与开发见 [CONTRIBUTING.md](CONTRIBUTING.md)，安全问题见 [SECURITY.md](SECURITY.md)。
+Licensed under the [MIT](LICENSE) License. See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines and [SECURITY.md](SECURITY.md) for security policies.
