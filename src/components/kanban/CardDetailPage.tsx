@@ -244,7 +244,7 @@ export function CardDetailPage({
                       />
                     </button>
                     {sessionMenuOpen && (
-                      <div className="dialog-in absolute left-0 top-full z-30 mt-1.5 flex max-h-72 w-72 flex-col overflow-hidden rounded-xl border-[0.5px] border-line bg-canvas p-1 shadow-pop">
+                      <div className="pop-card absolute left-0 top-full z-30 mt-1.5 flex max-h-72 w-72 flex-col overflow-hidden p-1">
                         {sessions.length === 0 ? (
                           <p className="px-2.5 py-2 text-xs text-ink2">{t('kanban.noSessionsInProject')}</p>
                         ) : (

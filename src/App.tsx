@@ -8,8 +8,7 @@ import { SettingsDialog, type SettingsSection } from '@/components/SettingsDialo
 import { RemoteAddDialog } from '@/components/RemoteAddDialog'
 import { Transcript } from '@/components/Transcript'
 import { Composer } from '@/components/Composer'
-import { ExtensionPrompt } from '@/components/ExtensionPrompt'
-import { NotifyStack } from '@/components/NotifyStack'
+import { ExtensionPrompt, findQuestionnaire } from '@/components/ExtensionPrompt'
 import { BootScreen } from '@/components/BootScreen'
 import { Home } from '@/components/Home'
 import { SessionHeader } from '@/components/SessionHeader'
@@ -430,6 +429,32 @@ export default function App() {
 
   const pendingRuntimeId = active?.runtime && !composingNew ? active.runtime.runtimeId : null
   const pendingRequest = pendingRuntimeId ? active?.interactive[0] : undefined
+  // Correlate a pending select/input prompt with a running ask_user_question
+  // tool call so the card can show "question k of N" and the upcoming questions.
+  const pendingMethod = (pendingRequest?.event as { method?: string } | undefined)?.method
+  const pendingTitle = ((pendingRequest?.event as { title?: string; message?: string } | undefined)?.title
+    ?? (pendingRequest?.event as { message?: string } | undefined)?.message) ?? ''
+  const questionnaire =
+    pendingRequest && (pendingMethod === 'select' || pendingMethod === 'input')
+      ? findQuestionnaire(active?.transcript ?? [], pendingTitle)
+      : null
+
+  // Auto-answer the extension's "Type your answer:" follow-up input with the
+  // text already typed into the sentinel's input box. Stash expires so a
+  // follow-up that never arrives can't hijack a later, unrelated input.
+  const customAnswerRef = useRef<{ runtimeId: string; text: string; at: number } | null>(null)
+  useEffect(() => {
+    const stash = customAnswerRef.current
+    if (!stash) return
+    if (Date.now() - stash.at > 15_000) {
+      customAnswerRef.current = null
+      return
+    }
+    if (!pendingRequest || !pendingRuntimeId || stash.runtimeId !== pendingRuntimeId) return
+    if ((pendingRequest.event as { method?: string }).method !== 'input') return
+    customAnswerRef.current = null
+    void pool.respondExtension(pendingRuntimeId, (pendingRequest.event as { id: string }).id, { value: stash.text })
+  }, [pendingRequest, pendingRuntimeId, pool])
 
   // Todo list docked above the composer: the last `todo` tool snapshot of the
   // active session. Hidden on the new-task draft so a finished task's list
@@ -585,6 +610,10 @@ export default function App() {
                   <ExtensionPrompt
                     key={(pendingRequest.event as { id: string }).id}
                     request={pendingRequest}
+                    questionnaire={questionnaire}
+                    onCustomAnswer={(text) => {
+                      if (pendingRuntimeId) customAnswerRef.current = { runtimeId: pendingRuntimeId, text, at: Date.now() }
+                    }}
                     onRespond={(response) => void pool.respondExtension(
                       pendingRuntimeId,
                       (pendingRequest.event as { id: string }).id,
@@ -648,9 +677,6 @@ export default function App() {
         )}
       </main>
       <ImageLightbox />
-      {pool.activeId && active && (
-        <NotifyStack notifies={active.notifies} onDismiss={(id) => pool.dismissNotify(pool.activeId!, id)} />
-      )}
       {settingsOpen && (
         <SettingsDialog
           meta={meta}

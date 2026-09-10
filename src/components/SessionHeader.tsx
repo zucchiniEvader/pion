@@ -227,7 +227,7 @@ export function SessionHeader({ sidebarOpen, onOpenSidebar, title, project }: Se
                 />
               </button>
               {branchMenuOpen && (
-                <div className="dialog-in no-drag absolute left-0 top-full z-30 mt-1.5 flex max-h-96 w-72 flex-col overflow-hidden rounded-xl border-[0.5px] border-line bg-canvas p-1 shadow-pop">
+                <div className="pop-card no-drag absolute left-0 top-full z-30 mt-1.5 flex max-h-96 w-72 flex-col overflow-hidden p-1">
                   {formMode ? (
                     <div className="flex flex-col gap-2 p-1.5">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink2">{t('header.newWorktree')}</p>
@@ -348,7 +348,7 @@ export function SessionHeader({ sidebarOpen, onOpenSidebar, title, project }: Se
           </span>
           {menuError && (
             <div
-              className="dialog-in absolute right-0 top-full z-30 mt-1.5 w-56 cursor-pointer break-words rounded-xl border-[0.5px] border-line bg-canvas px-2.5 py-2 text-[11px] text-bad shadow-pop"
+              className="pop-card absolute right-0 top-full z-30 mt-1.5 w-56 cursor-pointer break-words px-2.5 py-2 text-[11px] text-bad"
               onClick={() => setMenuError(null)}
             >
               {ue(menuError)}

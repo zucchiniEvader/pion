@@ -396,7 +396,7 @@ export function Composer({
                 <ChevronDown size={12} strokeWidth={2} className={cn('shrink-0 text-ink2 transition-transform', projectMenuOpen && 'rotate-180')} />
               </button>
               {projectMenuOpen && (
-                <div className="dialog-in absolute bottom-full left-0 z-30 mb-1.5 flex max-h-72 w-64 flex-col overflow-hidden rounded-xl border-[0.5px] border-line bg-canvas p-1 shadow-pop">
+                <div className="pop-card absolute bottom-full left-0 z-30 mb-1.5 flex max-h-72 w-64 flex-col overflow-hidden p-1">
                   <div className="min-h-0 flex-1 overflow-y-auto">
                     {projects.map((p) => (
                       <button
@@ -445,7 +445,7 @@ export function Composer({
         </div>
         <div className="relative">
           {slashOpen && (
-            <div className="dialog-in absolute bottom-full left-0 z-30 mb-1.5 max-h-72 w-[420px] overflow-y-auto rounded-xl border-[0.5px] border-line bg-canvas p-1 shadow-pop">
+            <div className="pop-card absolute bottom-full left-0 z-30 mb-1.5 max-h-72 w-[420px] overflow-y-auto p-1">
               {commands === null ? (
                 <p className="flex items-center gap-1.5 px-2.5 py-2 text-xs text-ink2">
                   <LoaderCircle size={11} className="animate-spin" /> {t('composer.loadingCommands')}
@@ -563,7 +563,7 @@ export function Composer({
                   else groups.set(m.provider, [m])
                 }
                 return (
-                  <div className="dialog-in absolute bottom-full right-0 z-30 mb-1.5 flex max-h-80 w-72 flex-col overflow-hidden rounded-xl border-[0.5px] border-line bg-canvas p-1 shadow-pop">
+                  <div className="pop-card absolute bottom-full right-0 z-30 mb-1.5 flex max-h-80 w-72 flex-col overflow-hidden p-1">
                     <div className="p-1 pb-1.5">
                       <Input
                         autoFocus
@@ -623,7 +623,7 @@ export function Composer({
                 <ChevronDown size={11} strokeWidth={2} className={cn('shrink-0 transition-transform', openMenu === 'thinking' && 'rotate-180')} />
               </button>
               {openMenu === 'thinking' && (
-                <div className="dialog-in absolute bottom-full right-0 z-30 mb-1.5 w-40 overflow-y-auto rounded-xl border-[0.5px] border-line bg-canvas p-1 shadow-pop">
+                <div className="pop-card absolute bottom-full right-0 z-30 mb-1.5 w-40 overflow-y-auto p-1">
                   {(levels ?? FALLBACK_THINKING_LEVELS).map((level) => (
                     <button
                       key={level}

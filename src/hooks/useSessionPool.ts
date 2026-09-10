@@ -5,19 +5,12 @@ import { useI18n } from '@/i18n'
 
 export type RuntimeStatus = 'idle' | 'running' | 'starting' | 'stopping' | 'error'
 
-export interface NotifyEntry {
-  id: string
-  message: string
-  notifyType: string
-}
-
 export interface SessionState {
   transcript: TranscriptMessage[]
   runtime: RuntimeInfo | null
   status: RuntimeStatus
   error: string | null
   statuses: Record<string, string>
-  notifies: NotifyEntry[]
   interactive: PiEventEnvelope[]
   crashed: boolean
   // True while the transcript is being re-read from disk; the UI holds one
@@ -53,7 +46,6 @@ function defaultSessionState(): SessionState {
     status: 'idle',
     error: null,
     statuses: {},
-    notifies: [],
     interactive: [],
     crashed: false,
     hydrating: false,
@@ -67,7 +59,7 @@ function defaultSessionState(): SessionState {
   }
 }
 
-// Interactive methods block the agent until a response; notify/setStatus/setWidget do not.
+// Interactive methods block the agent until a response; setStatus/setWidget do not.
 const INTERACTIVE_METHODS = new Set(['confirm', 'input', 'select', 'editor'])
 
 // Strip ANSI SGR escapes so extension status text renders as plain text.
@@ -147,9 +139,6 @@ export function useSessionPool() {
             if (!s.interactive.some((e) => (e.event as { id: string }).id === id)) {
               ns.interactive = [...s.interactive, envelope!]
             }
-          } else if (method === 'notify') {
-            // Fire-and-forget; dismissable locally, no round-trip required.
-            ns.notifies = [...s.notifies, { id, message: String(event.message ?? ''), notifyType: String(event.notifyType ?? 'info') }]
           } else if (method === 'setStatus') {
             ns.statuses = { ...s.statuses, [String(event.statusKey ?? '')]: stripAnsi(event.statusText) }
           }
@@ -488,10 +477,6 @@ export function useSessionPool() {
     await start(sessionPath ? { ...opts, sessionPath } : opts)
   }, [start])
 
-  const dismissNotify = useCallback((runtimeId: string, id: string) => {
-    patchSession(runtimeId, (s) => ({ ...s, notifies: s.notifies.filter((n) => n.id !== id) }))
-  }, [patchSession])
-
   // Keep PI's in-memory session name in sync after a file-level rename; the
   // rename itself already happened via sessions.rename in main. Best-effort:
   // the runtime may already be gone.
@@ -535,7 +520,6 @@ export function useSessionPool() {
     abort,
     restart,
     respondExtension,
-    dismissNotify,
     renameSession,
     setModel,
     setThinkingLevel,

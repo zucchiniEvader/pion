@@ -235,7 +235,7 @@ export function Sidebar({
                 <>
                   {/* Click-outside dismissal, same pattern as the project menu. */}
                   <div className="fixed inset-0 z-20" onClick={() => setAddProjectMenuOpen(false)} />
-                  <div className="dialog-in absolute right-0 top-full z-30 mt-1 min-w-[180px] rounded-xl border-[0.5px] border-line bg-canvas p-1 shadow-pop">
+                  <div className="pop-card absolute right-0 top-full z-30 mt-1 min-w-[180px] p-1">
                     <button
                       className="flex w-full items-center gap-2 rounded-lg px-2.5 py-[7px] text-left text-[13px] font-medium text-ink transition-colors hover:bg-fill-hover"
                       onClick={() => {
@@ -347,7 +347,7 @@ export function Sidebar({
                         <>
                           {/* Click-away catcher. */}
                           <div className="fixed inset-0 z-20" onClick={() => setMenuPath(null)} />
-                          <div className="dialog-in absolute right-1 top-full z-30 mt-1 w-72 overflow-hidden rounded-xl border-[0.5px] border-line bg-canvas p-2 shadow-pop">
+                          <div className="pop-card absolute right-1 top-full z-30 mt-1 w-72 overflow-hidden p-2">
                             <p className="px-1.5 pb-1 text-[11px] font-semibold uppercase tracking-[0.06em] text-ink2">{p.name}</p>
                             <div className="flex items-center gap-1.5 rounded-lg px-1.5 py-1.5">
                               <code className="min-w-0 flex-1 select-text truncate font-mono text-[11px] text-ink2" title={p.path}>
@@ -610,7 +610,7 @@ const SessionRow = memo(function SessionRow({
         </ContextMenu.Trigger>
         <ContextMenu.Portal>
           <ContextMenu.Positioner className="outline-none">
-            <ContextMenu.Popup className="dialog-in min-w-[192px] rounded-xl border-[0.5px] border-line bg-canvas p-1 shadow-pop">
+            <ContextMenu.Popup className="pop-card min-w-[192px] p-1">
               <ContextMenu.Item
                 className="flex cursor-default items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[13px] font-medium text-ink outline-none select-none data-highlighted:bg-fill-hover"
                 onClick={() => {
