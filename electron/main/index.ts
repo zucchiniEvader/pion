@@ -677,7 +677,7 @@ process.on('SIGHUP', () => app.quit())
 app.whenReady().then(async () => {
   startParentWatcher()
   if (process.platform === 'darwin') {
-    app.dock.setIcon(join(app.getAppPath(), 'assets', 'pion-logo.png'))
+    app.dock?.setIcon(join(app.getAppPath(), 'assets', 'pion-logo.png'))
   }
   registerIpc()
   // Daemon (goal.md v3 §7): every business handler forwards through it, so
