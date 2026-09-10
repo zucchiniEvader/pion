@@ -46,9 +46,12 @@
     --line: rgba(255, 255, 255, 0.13);
     --ink: #f5f5f7;
     --ink2: #98989d;
-    --accent: #98989d;
-    --accent-hover: #a2a2a7;
-    --accent-press: #8a8a8f;
+    /* keep in step with the .dark block below — this one is what theme=system
+       gets, so a drift here only shows up for users who never touched the
+       appearance setting */
+    --accent: #0a84ff;
+    --accent-hover: #3c9dff;
+    --accent-press: #0069d9;
     --ok: #30d158;
     --warn: #ff9f0a;
     --bad: #ff453a;

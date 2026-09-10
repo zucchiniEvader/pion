@@ -12,7 +12,7 @@ const buttonVariants = cva(
     variants: {
       variant: {
         primary:
-          'bg-accent text-white dark:text-[#27201d] shadow-[inset_0_0.5px_0_rgba(255,255,255,0.25)] ' +
+          'bg-accent text-white shadow-[inset_0_0.5px_0_rgba(255,255,255,0.25)] ' +
           'hover:bg-accent-hover active:bg-accent-press',
         secondary:
           'bg-raised text-ink border-[0.5px] border-line shadow-card ' +
