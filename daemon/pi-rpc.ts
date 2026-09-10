@@ -340,8 +340,11 @@ export class PiRpcRuntime {
       })
       stdout.on('error', failPipe)
     }
-    // stderr is collected separately and never forwarded to the renderer
-    // (it may contain secrets). Bounded to avoid unbounded memory growth.
+    // stderr is collected separately: the protocol stays clean and nothing is
+    // streamed live to the renderer. It is NOT discarded — on an unexpected
+    // exit the last lines go to daemon.log and one line (never more, and never
+    // the whole stream) is attached to the exit error, because pi puts the
+    // actual reason there. Bounded to avoid unbounded memory growth.
     if (stderr) {
       stderr.on('data', (chunk: Buffer) => {
         const slice = chunk.toString('utf8')
@@ -360,7 +363,13 @@ export class PiRpcRuntime {
       // stale-runtimeId report ("Runtime is no longer available") into an
       // undebuggable black hole.
       console.log(`[daemon] pi runtime ${this.runtimeId} exited (code ${code ?? '-'} signal ${signal ?? '-'}, expected=${this.stopped})`)
-      this.fail(new Error(`PI RPC exited (${code ?? signal ?? 'unknown'})`))
+      // pi explains itself on stderr and that text never travels over the
+      // protocol, so a bare exit code left users with nothing to act on
+      // ("PI RPC exited (1)" for a pi whose extension failed to load). Keep the
+      // full tail in the local log and the most useful line in the error.
+      const detail = this.stderrSummary()
+      if (!this.stopped && detail) console.log(`[daemon] pi runtime ${this.runtimeId} stderr:\n${this.stderrTail()}`)
+      this.fail(new Error(`PI RPC exited (${code ?? signal ?? 'unknown'})${detail ? `: ${detail}` : ''}`))
       this.emit({ type: 'runtime_exit', code, signal, expected: this.stopped })
       this.callbacks.onExit(this)
     })
@@ -427,6 +436,28 @@ export class PiRpcRuntime {
   /** Last captured stderr (bounded), for diagnostics on crash. */
   stderr(): string {
     return this.stderrChunks.join('')
+  }
+
+  /**
+   * pi's own explanation for an unexpected exit, for the user-facing error.
+   * Prefers the LAST line starting with "Error" — that is where pi reports the
+   * cause (e.g. `Error: Failed to load extension …`) even when a stack trace or
+   * a node banner follows it. Falls back to the last non-empty line.
+   */
+  private stderrSummary(): string | null {
+    const lines = this.stderr()
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+    if (!lines.length) return null
+    const line = [...lines].reverse().find((l) => /^error\b/i.test(l)) ?? lines[lines.length - 1]!
+    return line.length > 300 ? `${line.slice(0, 300)}…` : line
+  }
+
+  /** Trailing stderr for the crash log, capped so daemon.log cannot balloon. */
+  private stderrTail(max = 2000): string {
+    const text = this.stderr().trimEnd()
+    return text.length > max ? text.slice(-max) : text
   }
 
   private async performStop(): Promise<boolean> {
