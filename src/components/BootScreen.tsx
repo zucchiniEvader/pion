@@ -15,6 +15,11 @@ const PI_INSTALL_SCRIPT = 'curl -fsSL https://pi.dev/install.sh | sh'
 const PI_INSTALL_NPM = 'npm install -g --ignore-scripts @earendil-works/pi-coding-agent'
 // pi's own upgrade path (the same command Settings > Updates runs).
 const PI_UPDATE_COMMAND = 'pi update --all'
+// How long the gate waits before painting the checking screen. The probe is
+// warmed at launch and normally answers from cache, so this delay is only
+// reached when pi itself is slow — where the screen is real feedback, not a
+// flash on the way in.
+const SPLASH_DELAY_MS = 400
 
 interface BootScreenProps {
   phase: 'loading' | 'setup' | 'outdated' | 'welcome'
@@ -248,9 +253,19 @@ function OutdatedScreen({ piVersion, onRecheck }: { piVersion?: string | null; o
 // only mounts once all of that is done.
 export function BootScreen({ phase, platform, piVersion, onRecheck, onStart }: BootScreenProps) {
   const { t } = useI18n()
+  // No "checking…" screen for a blink: measured at ~230ms on a launch, right
+  // before the welcome page or the main UI. The gate stays mounted across
+  // phases, so this timer covers the launch only — a later 重新检测 has already
+  // elapsed it and shows its feedback at once.
+  const [splashReady, setSplashReady] = useState(false)
+  useEffect(() => {
+    const timer = setTimeout(() => setSplashReady(true), SPLASH_DELAY_MS)
+    return () => clearTimeout(timer)
+  }, [])
   if (phase === 'welcome') return <WelcomeScreen onStart={onStart} />
   if (phase === 'setup') return <SetupScreen platform={platform} onRecheck={onRecheck} />
   if (phase === 'outdated') return <OutdatedScreen piVersion={piVersion} onRecheck={onRecheck} />
+  if (!splashReady) return null
   return (
     <div className="flex flex-col items-center gap-4">
       <AppLogo className="size-14 rounded-2xl" />

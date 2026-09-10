@@ -728,6 +728,13 @@ function isAlive(pid: number): boolean {
 process.on('SIGHUP', () => app.quit())
 
 app.whenReady().then(async () => {
+  // Warm the pi probe while the daemon starts and the window loads. detectPi
+  // caches a positive result, and everything below runs before the renderer asks
+  // for its boot check (daemon spawn + hello, window creation, bundle load), so
+  // the gate then answers from cache instead of spending ~200ms in `pi --version`
+  // with a "checking" screen on the way in. A missing pi is not cached, so the
+  // setup page's 重新检测 still probes fresh.
+  void detectPi().catch(() => {})
   startParentWatcher()
   if (process.platform === 'darwin') {
     app.dock?.setIcon(join(app.getAppPath(), 'assets', 'pion-logo.png'))
