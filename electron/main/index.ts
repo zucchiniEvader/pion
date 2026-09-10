@@ -1,5 +1,5 @@
 // Electron main: app lifecycle, BrowserWindow, IPC proxy layer to pion-daemon.
-import { app, BrowserWindow, ipcMain, dialog, shell, nativeTheme } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell, nativeTheme, screen } from 'electron'
 
 // Dev mode on Windows/Linux derives the app name from the binary ("electron");
 // macOS dev uses the patched Info.plist (scripts/patch-dock-name.mjs). Set it
@@ -7,8 +7,9 @@ import { app, BrowserWindow, ipcMain, dialog, shell, nativeTheme } from 'electro
 app.setName('Pion')
 import { join, basename, dirname } from 'node:path'
 import { copyFile, readFile, writeFile, rename } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
+import { existsSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
+import { parseWindowBounds, rectCenter, resolveWindowBounds, MIN_HEIGHT, MIN_WIDTH, type Rect } from './window-bounds'
 import type {
   AppMeta,
   ProjectRecord,
@@ -582,17 +583,49 @@ function registerIpc(): void {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
+// Window placement state (client-local: main owns window lifecycle)
+// ──────────────────────────────────────────────────────────────────────────
+
+const WINDOW_STATE_FILE = 'window-state.json'
+
+/** Last window frame, or null on first launch / unreadable state. */
+async function loadWindowBounds(): Promise<Rect | null> {
+  try {
+    return parseWindowBounds(JSON.parse(await readFile(join(app.getPath('userData'), WINDOW_STATE_FILE), 'utf8')))
+  } catch {
+    return null // missing, unreadable or invalid JSON: fall back to centering
+  }
+}
+
+// Sync on purpose: 'close' cannot await, and a dropped write would silently
+// forget the position. The file is one short line.
+function saveWindowBounds(win: BrowserWindow): void {
+  try {
+    writeFileSync(join(app.getPath('userData'), WINDOW_STATE_FILE), `${JSON.stringify(win.getNormalBounds())}\n`)
+  } catch (err) {
+    console.log(`[window-state] save failed: ${(err as Error).message}`)
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
 // App lifecycle
 // ──────────────────────────────────────────────────────────────────────────
 
 async function createWindow(): Promise<void> {
   const dark = nativeTheme.shouldUseDarkColors
   const appIconPath = join(app.getAppPath(), 'assets', 'pion-logo.png')
+  // Explicit placement is required on macOS: with no x/y the window lands flush
+  // under the menu bar (measured: winY === workArea.y, x centered) rather than
+  // centered as Electron's docs suggest. Which display to use: the one owning
+  // the saved frame, else — first launch — the one the cursor is on, so the
+  // window opens where the user is actually looking.
+  const saved = await loadWindowBounds()
+  const display = screen.getDisplayNearestPoint(saved ? rectCenter(saved) : screen.getCursorScreenPoint())
+  const bounds = resolveWindowBounds(saved, display.workArea)
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    minWidth: 800,
-    minHeight: 500,
+    ...bounds,
+    minWidth: MIN_WIDTH,
+    minHeight: MIN_HEIGHT,
     title: 'Pion',
     icon: appIconPath,
     // mac: inset traffic lights over a draggable in-app toolbar for the
@@ -610,6 +643,10 @@ async function createWindow(): Promise<void> {
       sandbox: false,
     },
   })
+  // Remember the frame for the next launch; getNormalBounds keeps the
+  // pre-maximize size when the user quit in a zoomed/fullscreen window.
+  const win = mainWindow
+  win.on('close', () => saveWindowBounds(win))
   // External links open in the system browser, never in-app navigation.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('http://') || url.startsWith('https://')) {
