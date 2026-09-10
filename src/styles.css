@@ -214,6 +214,15 @@ textarea:focus-visible {
   box-shadow: none;
 }
 
+/* Inputs and the composer container share a focus ring. Keep this outside
+   Tailwind layers so the field reset above cannot suppress it. Shadows add
+   weight without changing dimensions or moving text. */
+.pion-input:focus,
+.pion-composer:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), 0 0 0 4px var(--tint-accent);
+}
+
 /* Window drag regions (titleBarStyle hiddenInset). */
 .drag { -webkit-app-region: drag; }
 .no-drag, button, input, textarea, select, a { -webkit-app-region: no-drag; }

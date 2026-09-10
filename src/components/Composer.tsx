@@ -418,7 +418,7 @@ export function Composer({
     <div className="shrink-0 px-6 pb-4">
       {/* Click-away catcher for the chip menus. */}
       {openMenu && <div className="fixed inset-0 z-20" onClick={() => setOpenMenu(null)} />}
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-0.5 rounded-2xl border-[0.5px] border-line bg-canvas px-3 py-2.5 shadow-card transition-all focus-within:border-accent focus-within:shadow-[0_0_0_3px_var(--tint-accent)]">
+      <div className="pion-composer mx-auto flex w-full max-w-3xl flex-col gap-0.5 rounded-2xl border-[0.5px] border-line bg-canvas px-3 py-2.5 shadow-card transition-[border-color,box-shadow] duration-150 motion-reduce:transition-none">
         {/* Stable slot above the textarea so the textarea never remounts when
             draft mode swaps to live mode. */}
         <div className="relative flex items-center gap-2">
