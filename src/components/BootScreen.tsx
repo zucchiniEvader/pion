@@ -4,6 +4,7 @@ import { AppLogo } from '@/components/AppLogo'
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
 import type { MsgKey } from '@/i18n/zh'
+import { MIN_PI_VERSION } from '@/lib/piVersion'
 
 // Where users get pi, and the two install routes pi.dev documents
 // (https://pi.dev/docs/latest). Keep these in sync with the site: the package
@@ -12,11 +13,15 @@ import type { MsgKey } from '@/i18n/zh'
 const PI_SITE_URL = 'https://pi.dev'
 const PI_INSTALL_SCRIPT = 'curl -fsSL https://pi.dev/install.sh | sh'
 const PI_INSTALL_NPM = 'npm install -g --ignore-scripts @earendil-works/pi-coding-agent'
+// pi's own upgrade path (the same command Settings > Updates runs).
+const PI_UPDATE_COMMAND = 'pi update --all'
 
 interface BootScreenProps {
-  phase: 'loading' | 'setup' | 'welcome'
+  phase: 'loading' | 'setup' | 'outdated' | 'welcome'
   /** AppMeta.platform — the official installer script is POSIX-only. */
   platform?: string
+  /** AppMeta.piVersion — what the version gate reports as found. */
+  piVersion?: string | null
   onRecheck: () => void
   /** Welcome page: dismiss the first-run intro and mount the main UI. */
   onStart: () => void
@@ -198,13 +203,54 @@ function SetupScreen({ platform, onRecheck }: {
   )
 }
 
+// Version gate: pi is present but older than the floor Pion is built against
+// (src/lib/piVersion.ts carries the evidence for the number). Same card shell as
+// the setup page so both gates read as one family.
+function OutdatedScreen({ piVersion, onRecheck }: { piVersion?: string | null; onRecheck: () => void }) {
+  const { t } = useI18n()
+  return (
+    <section className="w-full max-w-[460px] py-3" aria-labelledby="outdated-title">
+      <div className="overflow-hidden rounded-2xl border border-line bg-canvas shadow-[0_8px_40px_-16px_rgba(0,0,0,0.16)]">
+        <div className="px-6 pt-8 pb-6 sm:px-8">
+          <AppLogo className="mb-6 size-14 rounded-2xl" />
+          <p className="mb-2 text-[11px] font-medium tracking-[0.14em] text-ink2">{t('boot.outdatedLabel')}</p>
+          <h1 id="outdated-title" className="text-2xl font-semibold tracking-tight">{t('boot.outdatedTitle')}</h1>
+          <p className="mt-2 text-[13px] leading-relaxed text-ink2">
+            {t('boot.outdatedBody', { found: piVersion ?? '?', min: MIN_PI_VERSION })}
+          </p>
+          <p className="mt-3 text-[11px] leading-relaxed text-ink2">{t('boot.outdatedNote')}</p>
+
+          <div className="mt-4 divide-y divide-line">
+            <InstallCommand label={t('boot.outdatedUpdate')} command={PI_UPDATE_COMMAND} />
+            <InstallCommand label={t('boot.outdatedScript')} command={PI_INSTALL_SCRIPT} />
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-xs text-ink2">
+        <Button variant="ghost" size="sm" className="text-ink2" onClick={onRecheck}>
+          <RefreshCw size={12} />
+          {t('boot.recheck')}
+        </Button>
+        <span aria-hidden="true" className="h-3 w-px bg-line" />
+        <Button variant="ghost" size="sm" className="text-ink2" onClick={() => void window.pi.app.openExternal(PI_SITE_URL)}>
+          {t('boot.openSite')}
+          <ExternalLink size={12} />
+        </Button>
+      </div>
+    </section>
+  )
+}
+
 // Startup gate: a calm splash while the PI environment is verified, an install
-// guide when pi is missing, and a one-screen welcome on the first launch that
-// finds pi — the main UI only mounts once all of that is done.
-export function BootScreen({ phase, platform, onRecheck, onStart }: BootScreenProps) {
+// guide when pi is missing, an upgrade guide when pi is too old, and a
+// one-screen welcome on the first launch that finds a usable pi — the main UI
+// only mounts once all of that is done.
+export function BootScreen({ phase, platform, piVersion, onRecheck, onStart }: BootScreenProps) {
   const { t } = useI18n()
   if (phase === 'welcome') return <WelcomeScreen onStart={onStart} />
   if (phase === 'setup') return <SetupScreen platform={platform} onRecheck={onRecheck} />
+  if (phase === 'outdated') return <OutdatedScreen piVersion={piVersion} onRecheck={onRecheck} />
   return (
     <div className="flex flex-col items-center gap-4">
       <AppLogo className="size-14 rounded-2xl" />

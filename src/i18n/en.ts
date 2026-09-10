@@ -67,6 +67,12 @@ export const en: Record<MsgKey, string> = {
   'boot.installFailedExit': 'Install failed (exit code {code}). You can install manually with the commands below.',
   'boot.installLog': 'Install output',
   'boot.recheck': 'Check again',
+  'boot.outdatedLabel': 'PION · UPDATE NEEDED',
+  'boot.outdatedTitle': 'pi is out of date',
+  'boot.outdatedBody': 'Found v{found}; this app needs {min} or newer.',
+  'boot.outdatedNote': 'Older pi builds fail to load some extensions, which can stop sessions from starting at all.',
+  'boot.outdatedUpdate': 'Update pi',
+  'boot.outdatedScript': 'Or rerun the official installer',
   'boot.checking': 'Checking the PI environment…',
 
   // —— WelcomeScreen (first-launch intro) ——

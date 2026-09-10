@@ -18,6 +18,7 @@ import { TodoPanel } from '@/components/TodoPanel'
 import { BoardView } from '@/components/kanban/BoardView'
 import { useAllKanbanBoards } from '@/hooks/useAllKanbanBoards'
 import { useUpdateCheck } from '@/hooks/useUpdateCheck'
+import { isPiOutdated } from '@/lib/piVersion'
 import { useUserErrorMessage } from '@/i18n'
 
 // First-run onboarding (docs/onboarding-design.md §2): the welcome screen shows
@@ -40,7 +41,7 @@ export default function App() {
   // Boot gate: verify the PI environment before the main UI mounts; a machine
   // without pi is held on the setup guide, and the first launch that finds pi
   // gets the welcome screen.
-  const [boot, setBoot] = useState<'loading' | 'setup' | 'welcome' | 'ready'>('loading')
+  const [boot, setBoot] = useState<'loading' | 'setup' | 'outdated' | 'welcome' | 'ready'>('loading')
   const [projects, setProjects] = useState<ProjectRecord[]>([])
   const [sessionsByPath, setSessionsByPath] = useState<Record<string, SessionRecord[]>>({})
   // Session files this app created or opened, per project path; the sidebar
@@ -120,9 +121,14 @@ export default function App() {
     try {
       const m = await window.pi.app.getMeta()
       setMeta(m)
-      // Missing pi → fix the environment first; present → welcome once per
-      // client install, then straight into the UI on every later launch.
-      setBoot(m.piPath ? (welcomeSeen() ? 'ready' : 'welcome') : 'setup')
+      // Missing pi → fix the environment first. Present but ancient → gate it
+      // before the intro: an old pi fails *inside* every session (and is what
+      // makes some extensions fail to load at all), so sending the user into the
+      // UI would only produce unexplainable task failures. Then welcome once per
+      // client install, then straight in on every later launch.
+      if (!m.piPath) setBoot('setup')
+      else if (isPiOutdated(m.piVersion)) setBoot('outdated')
+      else setBoot(welcomeSeen() ? 'ready' : 'welcome')
       // Projects load as part of boot; the main UI stays empty without this.
       if (m.piPath) await refreshProjects()
     } catch {
@@ -592,6 +598,7 @@ export default function App() {
         <BootScreen
           phase={boot}
           platform={meta?.platform}
+          piVersion={meta?.piVersion}
           onRecheck={() => void runBootCheck()}
           onStart={finishWelcome}
         />

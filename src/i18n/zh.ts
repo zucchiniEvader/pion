@@ -70,6 +70,12 @@ export const zh = {
   'boot.installFailedExit': '安装失败（退出码 {code}）。可以改用下面的命令手动安装。',
   'boot.installLog': '安装输出',
   'boot.recheck': '重新检测',
+  'boot.outdatedLabel': 'PION · 需要升级',
+  'boot.outdatedTitle': 'pi 版本过旧',
+  'boot.outdatedBody': '检测到 v{found}，本应用需要 {min} 或更新版本。',
+  'boot.outdatedNote': '旧版 pi 会让部分扩展加载失败，会话可能直接开不起来。',
+  'boot.outdatedUpdate': '升级 pi',
+  'boot.outdatedScript': '或者重跑官方安装脚本',
   'boot.checking': '正在检查 PI 环境…',
 
   // —— WelcomeScreen（首次打开的欢迎页）——
