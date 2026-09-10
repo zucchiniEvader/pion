@@ -374,7 +374,9 @@ export const zh = {
   'settings.about.platform': '平台',
   'settings.about.pi': 'PI 运行时',
   'settings.about.piMissing': '未检测到 PI',
-  'settings.about.repo': '项目主页',
+  'settings.about.home': '项目主页',
+  'settings.about.repo': 'GitHub 仓库',
+  'settings.about.twitter': 'Twitter',
 
   // —— 远程添加项目 ——
   'sidebar.addProjectLocal': '本地目录…',

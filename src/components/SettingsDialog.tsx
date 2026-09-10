@@ -2,12 +2,15 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowUpCircle,
   Box,
+  AtSign,
   CircleCheck,
   Check,
   ChevronDown,
+  Code2,
   Copy,
   ExternalLink,
   FolderOpen,
+  Globe,
   Info,
   KeyRound,
   LoaderCircle,
@@ -1213,12 +1216,14 @@ function UpdatesSection({ meta, update }: { meta: AppMeta | null; update: Settin
 
 // ── About: versions + links ────────────────────────────────────────────────
 
+// Outbound links for the About pane. PROJECT_HOME_URL is the site the Pages
+// workflow deploys; package.json `homepage` mirrors it.
+const PROJECT_HOME_URL = 'https://zucchinievader.github.io/pion/'
+const PROJECT_REPO_URL = 'https://github.com/zucchiniEvader/pion'
+const AUTHOR_TWITTER_URL = 'https://x.com/zucchiniEvader'
+
 function AboutSection({ meta }: { meta: AppMeta | null }) {
   const { t } = useI18n()
-  const [releaseUrl, setReleaseUrl] = useState<string | null>(null)
-  useEffect(() => {
-    void window.pi.app.guiUpdate().then((g) => setReleaseUrl(g.releaseUrl)).catch(() => undefined)
-  }, [])
 
   return (
     <div className="flex flex-col gap-4">
@@ -1243,15 +1248,25 @@ function AboutSection({ meta }: { meta: AppMeta | null }) {
           )}
         </div>
       </div>
-      {releaseUrl && (
-        <button
-          className="flex h-8 items-center justify-center gap-1.5 rounded-lg border-[0.5px] border-line text-xs font-medium text-ink transition-colors hover:bg-fill-hover"
-          onClick={() => void window.pi.app.openExternal(releaseUrl)}
-        >
-          <ExternalLink size={12} strokeWidth={1.75} />
-          {t('settings.about.repo')}
-        </button>
-      )}
+      {/* Static links: they must not hinge on the release check, which needs
+          the network and returns no URL when offline. */}
+      <div className="flex flex-col gap-1.5">
+        {[
+          { href: PROJECT_HOME_URL, label: t('settings.about.home'), Icon: Globe },
+          { href: PROJECT_REPO_URL, label: t('settings.about.repo'), Icon: Code2 },
+          { href: AUTHOR_TWITTER_URL, label: t('settings.about.twitter'), Icon: AtSign },
+        ].map(({ href, label, Icon }) => (
+          <button
+            key={href}
+            className="flex h-8 items-center justify-center gap-1.5 rounded-lg border-[0.5px] border-line text-xs font-medium text-ink transition-colors hover:bg-fill-hover"
+            title={href}
+            onClick={() => void window.pi.app.openExternal(href)}
+          >
+            <Icon size={12} strokeWidth={1.75} />
+            {label}
+          </button>
+        ))}
+      </div>
       <p className="mt-auto text-[11px] text-ink2">MIT License</p>
     </div>
   )

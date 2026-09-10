@@ -372,7 +372,9 @@ export const en: Record<MsgKey, string> = {
   'settings.about.platform': 'Platform',
   'settings.about.pi': 'PI runtime',
   'settings.about.piMissing': 'PI not detected',
-  'settings.about.repo': 'Project home',
+  'settings.about.home': 'Project home',
+  'settings.about.repo': 'GitHub repository',
+  'settings.about.twitter': 'Twitter',
 
   // —— Add project from a remote runtime ——
   'sidebar.addProjectLocal': 'Local directory…',
