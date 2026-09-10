@@ -505,11 +505,10 @@ export function Sidebar({
       <footer className="flex h-12 shrink-0 items-center gap-2.5 border-t border-line px-3">
         <AppLogo className="size-6 rounded-md" />
         <span className="text-[13px] font-medium">Pion</span>
-        {meta?.piPath ? (
-          <span className="rounded-md bg-ok/10 px-1.5 py-0.5 text-[10px] font-medium text-ok">
-            {meta.piVersion ? `v${meta.piVersion}` : t('sidebar.piDetected')}
-          </span>
-        ) : (
+        {/* No version badge here: pi's version belongs in Settings > Updates,
+            which also covers Pion itself and the installed extensions. This row
+            only reports what the checks found wrong. */}
+        {meta && !meta.piPath && (
           <span className="rounded-md bg-bad/10 px-1.5 py-0.5 text-[10px] font-medium text-bad">{t('sidebar.piMissing')}</span>
         )}
         {updateCheck && updateCheck.outdatedCount > 0 && (

@@ -111,7 +111,6 @@ export const en: Record<MsgKey, string> = {
   'sidebar.noSessions': 'No sessions yet',
   'sidebar.archiveGroupTitle': 'Sessions never created or opened by this app; opening one adds it to the list',
   'sidebar.archiveGroup': 'Archive',
-  'sidebar.piDetected': 'Detected',
   'sidebar.piMissing': 'Not found',
   'sidebar.updateAvailableTitle': 'PI updates available',
   'sidebar.updatesCount': '{count} update{s}',

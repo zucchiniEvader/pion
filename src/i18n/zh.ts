@@ -114,7 +114,6 @@ export const zh = {
   'sidebar.noSessions': '暂无会话',
   'sidebar.archiveGroupTitle': '非本应用创建或打开过的会话；打开后会自动收录',
   'sidebar.archiveGroup': '归档',
-  'sidebar.piDetected': '已检测',
   'sidebar.piMissing': '未检测到',
   'sidebar.updateAvailableTitle': 'PI 有可用更新',
   'sidebar.updatesCount': '{count} 项更新',
