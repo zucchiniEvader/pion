@@ -715,6 +715,7 @@ export default function App() {
               mode={composingNew || !active?.runtime || draftRuntime ? 'draft' : 'live'}
               status={active?.status ?? (pool.pendingStart ? 'starting' : 'idle')}
               runtime={active?.runtime ?? null}
+              contextUsage={active?.contextUsage ?? null}
               draft={draft}
               onDraftChange={setDraft}
               onSend={(text, intent, images) => {

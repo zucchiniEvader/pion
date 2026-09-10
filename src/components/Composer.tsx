@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react'
-import type { PiAvailableModel, PiCommandInfo, ProjectRecord, PromptImage, RuntimeInfo } from '@/types'
+import type { ContextUsage, PiAvailableModel, PiCommandInfo, ProjectRecord, PromptImage, RuntimeInfo } from '@/types'
 import type { RuntimeStatus } from '@/hooks/useSessionPool'
 import { cn } from '@/lib/utils'
 import { useI18n, useUserErrorMessage } from '@/i18n'
@@ -55,6 +55,8 @@ interface ComposerProps {
   mode: 'draft' | 'live'
   status: RuntimeStatus
   runtime: RuntimeInfo | null
+  /** pi's context-window estimate for this session; absent = no ring. */
+  contextUsage?: ContextUsage | null
   draft: string
   onDraftChange: (text: string) => void
   /** Resolves true once dispatched; false or a throw restores the draft text. */
@@ -81,6 +83,50 @@ interface ComposerProps {
   focusKey: number
 }
 
+// Context-window gauge for the chip row. pi's get_session_stats reports an
+// estimate of the live context against the model's window; this is that number
+// as a ring (12 o'clock start, clockwise), with the raw token counts in the
+// tooltip since the row has no space for them. Neutral greys, like pi's own
+// footer: it is an indicator, not an accent or an alarm.
+function ContextRing({ usage }: { usage: ContextUsage }) {
+  const { t } = useI18n()
+  const size = 16
+  const stroke = 2.5
+  const radius = (size - stroke) / 2
+  const circumference = 2 * Math.PI * radius
+  const percent = usage.percent
+  // Right after compaction pi reports null tokens: draw the empty track only.
+  const filled = percent == null ? 0 : (circumference * Math.min(100, Math.max(0, percent))) / 100
+  const count = (n: number | null): string | number => (n == null ? '—' : n >= 1000 ? `${Math.round(n / 1000)}k` : n)
+  return (
+    <span
+      className="grid size-6 shrink-0 place-items-center"
+      title={t('composer.contextUsage', {
+        used: count(usage.tokens),
+        total: count(usage.contextWindow),
+        percent: percent == null ? '—' : Math.round(percent),
+      })}
+    >
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90" aria-hidden="true">
+        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" strokeWidth={stroke} stroke="currentColor" className="text-fill-active" />
+        {filled > 0 && (
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            strokeWidth={stroke}
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeDasharray={`${filled} ${circumference - filled}`}
+            className="text-ink2"
+          />
+        )}
+      </svg>
+    </span>
+  )
+}
+
 // The one composer for every state: docked at the bottom of the session view
 // on the new-task page, while the runtime spawns, and inside a live session.
 // It never unmounts across those transitions — only its chrome adapts
@@ -89,6 +135,7 @@ export function Composer({
   mode,
   status,
   runtime,
+  contextUsage,
   draft,
   onDraftChange,
   onSend,
@@ -533,6 +580,7 @@ export function Composer({
             <span />
           )}
           <div className="flex items-center gap-1">
+            {contextUsage && <ContextRing usage={contextUsage} />}
             <span className="relative hidden sm:block">
               <button
                 className={cn(

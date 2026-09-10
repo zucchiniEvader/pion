@@ -75,6 +75,7 @@ function validateCommand(command: RpcCommand): void {
     'new_session', 'prompt', 'steer', 'follow_up', 'abort', 'get_state',
     'switch_session', 'set_session_name', 'set_model', 'set_thinking_level',
     'get_available_models', 'get_available_thinking_levels', 'get_commands',
+    'get_session_stats',
     'extension_ui_response',
   ])
   if (!allowed.has(command.type)) throw new TypeError(`RPC command ${command.type} is not allowed`)

@@ -156,6 +156,7 @@ export const zh = {
   'composer.switchModel': '切换模型',
   'composer.piStartToSwitch': 'PI 启动后可切换',
   'composer.pickModel': '选择模型',
+  'composer.contextUsage': '上下文 {used} / {total}（{percent}%）',
   'composer.searchModel': '搜索模型…',
   'composer.noModels': '无匹配模型',
   'composer.switchThinking': '切换思考程度',

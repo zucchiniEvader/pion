@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
-import type { AgentStartOptions, PiAvailableModel, PiCommandInfo, PiEventEnvelope, PromptImage, RuntimeInfo } from '@/types'
+import type { AgentStartOptions, ContextUsage, PiAvailableModel, PiCommandInfo, PiEventEnvelope, PromptImage, RuntimeInfo } from '@/types'
 import { applyEvent, createTranscript, hydrateTranscript, needsHistoryHydration, type TranscriptMessage } from '@/lib/eventReducer'
 import { useI18n } from '@/i18n'
 
@@ -8,6 +8,10 @@ export type RuntimeStatus = 'idle' | 'running' | 'starting' | 'stopping' | 'erro
 export interface SessionState {
   transcript: TranscriptMessage[]
   runtime: RuntimeInfo | null
+  /** pi's current context-window estimate (what pi's own footer shows).
+   * Refreshed at agent_settled and when a runtime is attached; null until pi
+   * reports usage, so the composer simply shows no ring. */
+  contextUsage: ContextUsage | null
   status: RuntimeStatus
   error: string | null
   statuses: Record<string, string>
@@ -43,6 +47,7 @@ function defaultSessionState(): SessionState {
   return {
     transcript: createTranscript(),
     runtime: null,
+    contextUsage: null,
     status: 'idle',
     error: null,
     statuses: {},
@@ -94,6 +99,21 @@ export function useSessionPool() {
       return next
     })
   }, [])
+
+  // Ask pi for the context-window estimate. Context usage only moves when pi
+  // reports provider usage, so this rides the same boundaries as the rest of
+  // the state refresh rather than polling. Failures stay silent: the ring just
+  // does not render without a value.
+  const refreshContextUsage = useCallback(async (runtimeId: string) => {
+    try {
+      const res = await window.pi.agent.command(runtimeId, { type: 'get_session_stats' })
+      const data = res.data as { contextUsage?: ContextUsage } | undefined
+      const usage = data?.contextUsage ?? null
+      patchSession(runtimeId, (s) => (s.contextUsage === usage ? s : { ...s, contextUsage: usage }))
+    } catch {
+      /* runtime gone, or pi too old to know the command */
+    }
+  }, [patchSession])
 
   // Subscribe to the agent event stream for the lifetime of the hook. Events
   // for a runtime not yet known (bootstrap race) lazily create its state.
@@ -171,6 +191,8 @@ export function useSessionPool() {
           ns.status = 'error'
           ns.runtime = null
           ns.crashed = true
+          // The estimate belongs to the live runtime; it would only be stale.
+          ns.contextUsage = null
           ns.lastSessionFile = s.runtime?.sessionFile ?? s.lastSessionFile
           ns.lastRunMs = null
         } else if (event.type === 'transport_error') {
@@ -200,6 +222,9 @@ export function useSessionPool() {
         flush()
       }
       applyOne(rid, event, envelope)
+      // agent_settled is the stable idle boundary: this run's usage has landed,
+      // so the context estimate is worth re-reading here.
+      if (event.type === 'agent_settled') void refreshContextUsage(rid)
     })
     return () => {
       unsubscribe()
@@ -225,6 +250,9 @@ export function useSessionPool() {
           runtime: info,
           status: info.isStreaming ? 'running' : 'idle',
         }))
+        // Adopted runtime: its session may already carry usage from a previous
+        // app run, so show the ring without waiting for a new turn.
+        void refreshContextUsage(info.runtimeId)
         const s0 = sessionsRef.current.get(info.runtimeId)
         const hydrate = needsHistoryHydration(s0, info.sessionFile)
         if (hydrate && info.sessionFile) {
@@ -295,6 +323,9 @@ export function useSessionPool() {
       activeIdRef.current = info.runtimeId
       // Foregrounding a freshly started/reattached session reads it as seen.
       patchSession(info.runtimeId, (s) => (s.unread ? { ...s, unread: false } : s))
+      // A resumed session already holds usage on disk; don't make the ring wait
+      // for the user's next turn.
+      void refreshContextUsage(info.runtimeId)
       if (shouldHydrate && options.sessionPath) {
         try {
           const { messages } = await window.pi.sessions.read(options.sessionPath, info.runtimeId)

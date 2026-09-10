@@ -153,6 +153,7 @@ export const en: Record<MsgKey, string> = {
   'composer.switchModel': 'Switch model',
   'composer.piStartToSwitch': 'Available once PI starts',
   'composer.pickModel': 'Select model',
+  'composer.contextUsage': 'Context {used} / {total} ({percent}%)',
   'composer.searchModel': 'Search models…',
   'composer.noModels': 'No matching models',
   'composer.switchThinking': 'Switch thinking level',

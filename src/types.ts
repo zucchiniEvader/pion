@@ -305,6 +305,18 @@ export interface PiAvailableModel {
   reasoning?: boolean
 }
 
+/** pi `get_session_stats` → `data.contextUsage` (mirrors pi's ContextUsage).
+ * The current context-window estimate, i.e. what pi itself shows in its footer
+ * and feeds to its compaction policy — not a cumulative session total. */
+export interface ContextUsage {
+  /** Estimated context tokens; null right after compaction, before the next
+   * LLM response reports usage again. */
+  tokens: number | null
+  contextWindow: number
+  /** tokens as a percentage of contextWindow; null while tokens is unknown. */
+  percent: number | null
+}
+
 export interface RuntimeInfo {
   runtimeId: string
   cwd: string
@@ -337,6 +349,7 @@ export type RpcCommand =
   | { type: 'get_available_models' }
   | { type: 'get_available_thinking_levels' }
   | { type: 'get_commands' }
+  | { type: 'get_session_stats' }
   | {
       type: 'extension_ui_response'
       id: string
