@@ -588,10 +588,9 @@ export default function App() {
   // Startup gate: hold the splash (or setup guide) until PI checks out.
   if (boot !== 'ready') {
     return (
-      <div className="grid h-full place-items-center bg-canvas text-ink">
+      <div className="grid h-full place-items-center overflow-y-auto bg-canvas px-5 py-12 text-ink">
         <BootScreen
           phase={boot}
-          problem={meta?.problem?.reason}
           platform={meta?.platform}
           onRecheck={() => void runBootCheck()}
           onStart={finishWelcome}

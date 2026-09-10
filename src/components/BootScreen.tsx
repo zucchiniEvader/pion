@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Check, Copy, Download, ExternalLink, FolderGit2, KanbanSquare, LoaderCircle, MessagesSquare, RefreshCw } from 'lucide-react'
+import { ArrowRight, Check, ChevronRight, Copy, Download, ExternalLink, FolderGit2, KanbanSquare, LoaderCircle, MessagesSquare, RefreshCw, Terminal } from 'lucide-react'
 import { AppLogo } from '@/components/AppLogo'
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
@@ -15,8 +15,6 @@ const PI_INSTALL_NPM = 'npm install -g --ignore-scripts @earendil-works/pi-codin
 
 interface BootScreenProps {
   phase: 'loading' | 'setup' | 'welcome'
-  /** detectPi's reason for the failure, shown on the setup page. */
-  problem?: string
   /** AppMeta.platform — the official installer script is POSIX-only. */
   platform?: string
   onRecheck: () => void
@@ -24,8 +22,7 @@ interface BootScreenProps {
   onStart: () => void
 }
 
-// What Pion is, in three lines (docs/onboarding-design.md §3.3). Same card
-// language as Home's starter chips.
+// The three core workflows introduced on first launch.
 const FEATURES: { icon: typeof MessagesSquare; titleKey: MsgKey; descKey: MsgKey }[] = [
   { icon: MessagesSquare, titleKey: 'welcome.feature.sessions', descKey: 'welcome.feature.sessions.desc' },
   { icon: FolderGit2, titleKey: 'welcome.feature.projects', descKey: 'welcome.feature.projects.desc' },
@@ -35,28 +32,33 @@ const FEATURES: { icon: typeof MessagesSquare; titleKey: MsgKey; descKey: MsgKey
 function WelcomeScreen({ onStart }: { onStart: () => void }) {
   const { t } = useI18n()
   return (
-    <div className="flex max-w-md flex-col items-center text-center">
-      <AppLogo className="mb-5 size-16 rounded-2xl" />
-      <h1 className="text-xl font-semibold tracking-tight">{t('welcome.title')}</h1>
-      <p className="mt-2 text-[13px] leading-relaxed text-ink2">{t('welcome.subtitle')}</p>
-      <ul className="mt-6 w-full space-y-2 text-left">
-        {FEATURES.map(({ icon: Icon, titleKey, descKey }) => (
-          <li
-            key={titleKey}
-            className="flex gap-2.5 rounded-xl border-[0.5px] border-line bg-panel px-3 py-2.5 shadow-card"
-          >
-            <Icon size={15} strokeWidth={1.75} className="shrink-0 self-center text-ink2" />
-            <div className="min-w-0">
-              <div className="text-[13px] font-medium">{t(titleKey)}</div>
-              <div className="mt-0.5 text-xs leading-relaxed text-ink2">{t(descKey)}</div>
-            </div>
-          </li>
-        ))}
-      </ul>
-      <Button variant="primary" className="mt-6 h-8 px-5" onClick={onStart}>
-        {t('welcome.start')}
-      </Button>
-    </div>
+    <section className="w-full max-w-[460px] py-3" aria-labelledby="welcome-title">
+      <div className="overflow-hidden rounded-2xl border border-line bg-canvas px-6 py-8 shadow-[0_8px_40px_-16px_rgba(0,0,0,0.16)] sm:px-8">
+        <AppLogo className="mb-6 size-14 rounded-2xl" />
+        <p className="mb-2 text-[11px] font-medium tracking-[0.14em] text-ink2">{t('welcome.label')}</p>
+        <h1 id="welcome-title" className="text-2xl font-semibold tracking-tight">{t('welcome.title')}</h1>
+        <p className="mt-2 text-[13px] leading-relaxed text-ink2">{t('welcome.subtitle')}</p>
+
+        <ul className="mt-6 divide-y divide-line">
+          {FEATURES.map(({ icon: Icon, titleKey, descKey }) => (
+            <li key={titleKey} className="flex gap-3 py-4">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-panel text-ink2">
+                <Icon size={17} strokeWidth={1.75} />
+              </span>
+              <div className="min-w-0">
+                <div className="text-[13px] font-medium">{t(titleKey)}</div>
+                <p className="mt-1 text-xs leading-relaxed text-ink2">{t(descKey)}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+
+        <Button variant="primary" className="mt-5 h-10 w-full rounded-lg text-[13px]" onClick={onStart}>
+          {t('welcome.start')}
+          <ArrowRight size={15} />
+        </Button>
+      </div>
+    </section>
   )
 }
 
@@ -76,7 +78,7 @@ function InstallCommand({ label, command, note }: { label: string; command: stri
     }
   }
   return (
-    <div className="rounded-xl border-[0.5px] border-line bg-panel p-3 shadow-card">
+    <div className="py-4 first:pt-1 last:pb-0">
       <div className="flex items-center justify-between gap-2">
         <span className="text-[13px] font-medium">{label}</span>
         <Button size="sm" variant="ghost" onClick={() => void copy()}>
@@ -84,10 +86,10 @@ function InstallCommand({ label, command, note }: { label: string; command: stri
           {t(copied ? 'settings.copied' : 'settings.copy')}
         </Button>
       </div>
-      <code className="mt-2 block select-all break-all rounded-md bg-fill-hover px-2 py-1.5 text-[11px] leading-relaxed text-ink2">
+      <code className="mt-2 block select-all break-all rounded-lg bg-panel px-3 py-2.5 text-[11px] leading-relaxed text-ink">
         {command}
       </code>
-      {note && <p className="mt-1.5 text-[11px] text-ink2">{note}</p>}
+      {note && <p className="mt-2 text-[11px] leading-relaxed text-ink2">{note}</p>}
     </div>
   )
 }
@@ -97,8 +99,7 @@ function InstallCommand({ label, command, note }: { label: string; command: stri
 // electron/main/pi-install.ts); the copyable commands stay as the fallback for
 // what one-click cannot cover — a machine without Node, where the installer
 // needs a terminal to offer installing it.
-function SetupScreen({ problem, platform, onRecheck }: {
-  problem?: string
+function SetupScreen({ platform, onRecheck }: {
   platform?: string
   onRecheck: () => void
 }) {
@@ -134,66 +135,76 @@ function SetupScreen({ problem, platform, onRecheck }: {
   }
 
   return (
-    <div className="flex max-w-lg flex-col items-center text-center">
-      <AppLogo className="mb-4 size-14 rounded-2xl" />
-      <h1 className="text-xl font-semibold tracking-tight">{t('boot.piMissing')}</h1>
-      <p className="mt-2 text-[13px] leading-relaxed text-ink2">{t('boot.piRequired')}</p>
+    <section className="w-full max-w-[460px] py-3" aria-labelledby="setup-title">
+      <div className="overflow-hidden rounded-2xl border border-line bg-canvas shadow-[0_8px_40px_-16px_rgba(0,0,0,0.16)]">
+        <div className="px-6 pt-8 pb-6 sm:px-8">
+          <AppLogo className="mb-6 size-14 rounded-2xl" />
+          <p className="mb-2 text-[11px] font-medium tracking-[0.14em] text-ink2">{t('boot.setupLabel')}</p>
+          <h1 id="setup-title" className="text-2xl font-semibold tracking-tight">{t('boot.setupTitle')}</h1>
+          <p className="mt-2 text-[13px] leading-relaxed text-ink2">{t('boot.piRequired')}</p>
 
-      <Button variant="primary" className="mt-5 h-8 px-4" disabled={installing} onClick={() => void install()}>
-        {installing ? <LoaderCircle size={14} className="animate-spin" /> : <Download size={14} />}
-        {t(installing ? 'boot.installing' : 'boot.autoInstall')}
-      </Button>
-      <p className="mt-2 max-w-md text-[11px] leading-relaxed text-ink2">{t('boot.autoInstallHint')}</p>
+          <div className="mt-6 flex items-center gap-2 rounded-lg bg-panel px-3 py-2.5 text-xs text-ink2">
+            <span className="size-1.5 shrink-0 rounded-full bg-warn" />
+            {t('boot.piMissing')}
+          </div>
+          <Button variant="primary" className="mt-3 h-10 w-full rounded-lg text-[13px]" disabled={installing} onClick={() => void install()}>
+            {installing ? <LoaderCircle size={15} className="animate-spin" /> : <Download size={15} />}
+            {t(installing ? 'boot.installing' : 'boot.autoInstall')}
+          </Button>
+          <p className="mt-3 text-center text-[11px] leading-relaxed text-ink2">{t('boot.autoInstallHint')}</p>
 
-      {(log.length > 0 || failure || installing) && (
-        <div ref={logRef} className="mt-3 max-h-32 w-full overflow-y-auto rounded-md bg-canvas px-2 py-1.5 text-left font-mono text-[10px] leading-4 text-ink2">
-          {log.map((line, i) => (
-            <div key={i} className="break-all whitespace-pre-wrap">{line}</div>
-          ))}
-          {failure && <div className="break-all whitespace-pre-wrap text-bad">{failure}</div>}
+          {(log.length > 0 || failure || installing) && (
+            <div ref={logRef} role="log" aria-live="polite" aria-label={t('boot.installLog')} className="mt-4 max-h-36 overflow-y-auto rounded-lg border border-line bg-panel p-3 text-left font-mono text-[11px] leading-5 text-ink2">
+              {installing && log.length === 0 && <div>{t('boot.installing')}</div>}
+              {log.map((line, i) => (
+                <div key={i} className="break-all whitespace-pre-wrap">{line}</div>
+              ))}
+              {failure && <div className="break-all whitespace-pre-wrap text-bad">{failure}</div>}
+            </div>
+          )}
         </div>
-      )}
 
-      {problem && <p className="mt-3 text-xs text-warn">{problem}</p>}
+        <details className="group border-t border-line">
+          <summary className="flex cursor-pointer list-none items-center gap-2 px-6 py-4 text-xs text-ink2 transition-colors hover:bg-fill-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent sm:px-8 [&::-webkit-details-marker]:hidden">
+            <Terminal size={14} />
+            <span className="flex-1">{t('boot.manualInstall')}</span>
+            <ChevronRight size={14} className="transition-transform group-open:rotate-90" />
+          </summary>
+          <div className="divide-y divide-line px-6 pb-5 sm:px-8">
+            <InstallCommand
+              label={t(platform === 'win32' ? 'boot.installNpm' : 'boot.installScript')}
+              command={platform === 'win32' ? PI_INSTALL_NPM : PI_INSTALL_SCRIPT}
+              note={platform === 'win32' ? undefined : t('boot.installScriptNote')}
+            />
+            {platform !== 'win32' && <InstallCommand label={t('boot.installNpm')} command={PI_INSTALL_NPM} />}
+          </div>
+        </details>
 
-      <div className="mt-5 flex w-full items-center gap-3">
-        <span className="h-px flex-1 bg-line" />
-        <span className="text-[11px] text-ink2">{t('boot.manualInstall')}</span>
-        <span className="h-px flex-1 bg-line" />
       </div>
 
-      <div className="mt-3 w-full space-y-2.5 text-left">
-        {/* The official installer is a POSIX shell script; Windows only has the
-            npm route documented, so there we show npm alone. */}
-        <InstallCommand
-          label={t('boot.installScript')}
-          command={platform === 'win32' ? PI_INSTALL_NPM : PI_INSTALL_SCRIPT}
-          note={platform === 'win32' ? undefined : t('boot.installScriptNote')}
-        />
-        {platform !== 'win32' && <InstallCommand label={t('boot.installNpm')} command={PI_INSTALL_NPM} />}
-      </div>
-
-      <div className="mt-5 flex items-center gap-2">
-        <Button variant="secondary" onClick={() => void window.pi.app.openExternal(PI_SITE_URL)}>
-          <ExternalLink size={14} />
-          {t('boot.openSite')}
-        </Button>
-        <Button variant="secondary" onClick={onRecheck}>
-          <RefreshCw size={14} />
+      <div className="mt-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-xs text-ink2">
+        <span>{t('boot.alreadyInstalled')}</span>
+        <Button variant="ghost" size="sm" className="text-ink2" disabled={installing} onClick={onRecheck}>
+          <RefreshCw size={12} />
           {t('boot.recheck')}
         </Button>
+        <span aria-hidden="true" className="h-3 w-px bg-line" />
+        <Button variant="ghost" size="sm" className="text-ink2" onClick={() => void window.pi.app.openExternal(PI_SITE_URL)}>
+          {t('boot.openSite')}
+          <ExternalLink size={12} />
+        </Button>
       </div>
-    </div>
+    </section>
   )
 }
 
 // Startup gate: a calm splash while the PI environment is verified, an install
 // guide when pi is missing, and a one-screen welcome on the first launch that
 // finds pi — the main UI only mounts once all of that is done.
-export function BootScreen({ phase, problem, platform, onRecheck, onStart }: BootScreenProps) {
+export function BootScreen({ phase, platform, onRecheck, onStart }: BootScreenProps) {
   const { t } = useI18n()
   if (phase === 'welcome') return <WelcomeScreen onStart={onStart} />
-  if (phase === 'setup') return <SetupScreen problem={problem} platform={platform} onRecheck={onRecheck} />
+  if (phase === 'setup') return <SetupScreen platform={platform} onRecheck={onRecheck} />
   return (
     <div className="flex flex-col items-center gap-4">
       <AppLogo className="size-14 rounded-2xl" />
