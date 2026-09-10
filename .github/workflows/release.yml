@@ -27,7 +27,9 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-      # GH_TOKEN 只给这一步：构建阶段不带它，electron-builder 就不会自作主张去 publish
-      - run: gh release create "$GITHUB_REF_NAME" release/*.dmg --generate-notes --title "Pion ${GITHUB_REF_NAME#v}"
+      # GH_TOKEN 只给这一步：构建阶段不带它，electron-builder 就不会自作主张去 publish。
+      # 附件要带全：electron-updater 在 mac 上先读 latest-mac.yml（版本 + 校验值）再下 zip
+      # 更新，dmg 只是首次安装的介质。只传 dmg 的话应用内「检查更新」拿不到任何信息。
+      - run: gh release create "$GITHUB_REF_NAME" release/*.dmg release/*.zip release/*.blockmap release/latest-mac.yml --generate-notes --title "Pion ${GITHUB_REF_NAME#v}"
         env:
           GH_TOKEN: ${{ github.token }}
