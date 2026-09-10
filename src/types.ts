@@ -327,7 +327,18 @@ export interface PiCommandInfo {
   name: string
   description?: string
   source: 'extension' | 'prompt' | 'skill'
-  sourceInfo?: unknown
+  sourceInfo?: PiCommandSourceInfo
+}
+
+/** Where a command came from, as pi reports it. Adapters for community plugins
+ * key on `source` ("npm:<package>"); the directory fields let a plugin loaded
+ * from a local checkout match too. */
+export interface PiCommandSourceInfo {
+  path?: string
+  source?: string
+  scope?: string
+  origin?: string
+  baseDir?: string
 }
 
 /** One entry of pi's get_available_models registry listing. */

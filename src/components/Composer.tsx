@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef, useState, type ClipboardEvent, type Keyboa
 import type { ContextUsage, PiAvailableModel, PiCommandInfo, ProjectRecord, PromptImage, RuntimeInfo } from '@/types'
 import type { RuntimeStatus } from '@/hooks/useSessionPool'
 import { cn } from '@/lib/utils'
+import { argumentCompletions } from '@/lib/pluginAdapters'
 import { useI18n, useUserErrorMessage } from '@/i18n'
 import type { MsgKey } from '@/i18n/zh'
 import { Input } from '@/components/ui/input'
@@ -289,20 +290,20 @@ export function Composer({
   })
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (slashOpen && slashItems.length > 0) {
+    if (popupItems.length > 0) {
       if (e.key === 'ArrowDown') {
         e.preventDefault()
-        setSlashHighlight((slashIndex + 1) % slashItems.length)
+        setSlashHighlight((popupIndex + 1) % popupItems.length)
         return
       }
       if (e.key === 'ArrowUp') {
         e.preventDefault()
-        setSlashHighlight((slashIndex - 1 + slashItems.length) % slashItems.length)
+        setSlashHighlight((popupIndex - 1 + popupItems.length) % popupItems.length)
         return
       }
       if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing)) {
         e.preventDefault()
-        acceptSlashItem(slashItems[slashIndex])
+        acceptPopupItem(popupItems[popupIndex]!)
         return
       }
       if (e.key === 'Escape') {
@@ -369,22 +370,42 @@ export function Composer({
   // which page the composer is docked on.
   const menusReady = runtime != null
 
-  // ── Slash commands ─────────────────────────────────────────────────────
-  // Typing "/" (name phase, no space yet) opens the autocomplete popup fed
-  // by pi's get_commands. PI itself executes/expands the sent text — the
-  // composer only completes names. Idle-only: queued sends (follow_up) do
-  // not run extension commands on pi's side.
+  // ── Slash commands & plugin argument completion ────────────────────────
+  // Typing "/" (name phase, no space yet) opens the autocomplete popup fed by
+  // pi's get_commands. PI itself executes/expands the sent text — the composer
+  // only completes names. Idle-only: queued sends (follow_up) do not run
+  // extension commands on pi's side.
+  //
+  // Past the first space the same popup serves the argument phase, fed by the
+  // plugin adaptation channel (src/lib/pluginAdapters.ts) — pi's RPC carries no
+  // argument completions, so those tables are Pion's, one per plugin, and only
+  // for a plugin the running pi actually loaded.
   const [commands, setCommands] = useState<PiCommandInfo[] | null>(null)
   const [slashHighlight, setSlashHighlight] = useState(0)
   const [slashDismissed, setSlashDismissed] = useState(false)
-  const slashMatch = /^\/(\S*)$/.exec(draft)
-  const slashOpen = !!slashMatch && !slashDismissed && menusReady && !running && !stopping && !starting
+  const popupReady = !slashDismissed && menusReady && !running && !stopping && !starting
+  const slashMatch = popupReady ? /^\/(\S*)$/.exec(draft) : null
   const slashQuery = (slashMatch?.[1] ?? '').toLowerCase()
   const slashItems =
-    slashOpen && commands
+    slashMatch && commands
       ? commands.filter((c) => c.name.toLowerCase().startsWith(slashQuery))
       : []
-  const slashIndex = slashItems.length ? Math.min(slashHighlight, slashItems.length - 1) : 0
+  // Null unless an adapter answers for this command and level: a command with
+  // no adapter, or one whose plugin is not installed, keeps the composer plain.
+  const argCompletion =
+    popupReady && !slashMatch && commands ? argumentCompletions({ commands, draft }) : null
+  type PopupItem =
+    | { kind: 'command'; command: PiCommandInfo }
+    | { kind: 'argument'; value: string; label: string; description?: string }
+  const popupItems: PopupItem[] = slashMatch
+    ? slashItems.map((command) => ({ kind: 'command' as const, command }))
+    : (argCompletion?.items ?? []).map((item) => ({
+        kind: 'argument' as const,
+        value: item.value,
+        label: item.label ?? item.value,
+        description: item.description,
+      }))
+  const popupIndex = popupItems.length ? Math.min(slashHighlight, popupItems.length - 1) : 0
 
   // A new runtime carries its own command registry; typing re-arms the
   // popup after an Escape dismissal.
@@ -398,8 +419,12 @@ export function Composer({
   useEffect(() => {
     setSlashDismissed(false)
   }, [draft])
+  // The registry is also what tells the argument phase which commands exist,
+  // so load it once the draft looks like a command at all (name or argument
+  // phase) rather than only when the name popup is up.
+  const wantsCommands = popupReady && (!!slashMatch || draft.startsWith('/'))
   useEffect(() => {
-    if (!slashOpen || commands !== null) return
+    if (!wantsCommands || commands !== null) return
     let cancelled = false
     void onGetCommands()
       .then((list) => {
@@ -411,10 +436,10 @@ export function Composer({
     return () => {
       cancelled = true
     }
-  }, [slashOpen, commands, onGetCommands])
+  }, [wantsCommands, commands, onGetCommands])
 
-  // Enter/Tab on a popup item: exact "/name" sends (pi runs or expands it),
-  // anything else completes the name and leaves room for arguments.
+  // Enter/Tab on a popup item: an exact command name sends (pi runs or expands
+  // it), anything else completes and leaves room for arguments.
   const acceptSlashItem = (item: PiCommandInfo) => {
     const full = `/${item.name}`
     // Enter on an exactly-typed command sends it. Case is folded for the
@@ -423,6 +448,19 @@ export function Composer({
     // sent as "/mcp" (otherwise it reaches the model as plain text).
     if (draft.trim().toLowerCase() === full.toLowerCase()) void send('prompt', full)
     else onDraftChange(`${full} `)
+  }
+
+  // Accepting an argument writes it into the draft and leaves a trailing space:
+  // two more levels follow for `/mcp token`, and for a leaf argument the next
+  // Enter sends.
+  const acceptArgument = (value: string): void => {
+    if (!argCompletion) return
+    onDraftChange(`/${[argCompletion.command, ...argCompletion.completed, value].join(' ')} `)
+  }
+
+  const acceptPopupItem = (item: PopupItem): void => {
+    if (item.kind === 'command') acceptSlashItem(item.command)
+    else acceptArgument(item.value)
   }
 
   return (
@@ -513,39 +551,63 @@ export function Composer({
           ))}
         </div>
         <div className="relative">
-          {slashOpen && (
+          {(slashMatch || argCompletion) && (
             <div className="pop-card absolute bottom-full left-0 z-30 mb-1.5 max-h-72 w-[420px] overflow-y-auto p-1">
-              {commands === null ? (
+              {slashMatch && commands === null ? (
                 <p className="flex items-center gap-1.5 px-2.5 py-2 text-xs text-ink2">
                   <LoaderCircle size={11} className="animate-spin" /> {t('composer.loadingCommands')}
                 </p>
-              ) : slashItems.length === 0 ? (
+              ) : popupItems.length === 0 ? (
                 <p className="px-2.5 py-2 text-xs text-ink2">{t('composer.noCommands')}</p>
               ) : (
-                slashItems.map((item, i) => (
-                  <button
-                    key={`${item.source}:${item.name}`}
-                    className={cn(
-                      'flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs text-ink transition-colors',
-                      i === slashIndex ? 'bg-fill-hover' : 'hover:bg-fill-hover',
-                    )}
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => acceptSlashItem(item)}
-                  >
-                    <span className="shrink-0 font-medium">/{item.name}</span>
-                    {item.description && <span className="min-w-0 flex-1 truncate text-ink2">{item.description}</span>}
-                    <span
-                      className={cn(
-                        'shrink-0 rounded px-1.5 py-px text-[10px] font-medium',
-                        item.source === 'extension' && 'bg-tint-accent text-ink2',
-                        item.source === 'prompt' && 'bg-fill-hover text-ink2',
-                        item.source === 'skill' && 'bg-ok/10 text-ok',
-                      )}
-                    >
-                      {item.source === 'extension' ? t('composer.sourceExtension') : item.source === 'prompt' ? t('composer.sourcePrompt') : t('composer.sourceSkill')}
-                    </span>
-                  </button>
-                ))
+                <>
+                  {/* Argument candidates come from Pion's own table for that
+                      plugin, so the header names the source. */}
+                  {argCompletion && (
+                    <p className="px-2.5 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-ink2">
+                      /{argCompletion.command} · {argCompletion.adapter.name}
+                    </p>
+                  )}
+                  {popupItems.map((item, i) =>
+                    item.kind === 'command' ? (
+                      <button
+                        key={`c:${item.command.source}:${item.command.name}`}
+                        className={cn(
+                          'flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs text-ink transition-colors',
+                          i === popupIndex ? 'bg-fill-hover' : 'hover:bg-fill-hover',
+                        )}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => acceptSlashItem(item.command)}
+                      >
+                        <span className="shrink-0 font-medium">/{item.command.name}</span>
+                        {item.command.description && <span className="min-w-0 flex-1 truncate text-ink2">{item.command.description}</span>}
+                        <span
+                          className={cn(
+                            'shrink-0 rounded px-1.5 py-px text-[10px] font-medium',
+                            item.command.source === 'extension' && 'bg-tint-accent text-ink2',
+                            item.command.source === 'prompt' && 'bg-fill-hover text-ink2',
+                            item.command.source === 'skill' && 'bg-ok/10 text-ok',
+                          )}
+                        >
+                          {item.command.source === 'extension' ? t('composer.sourceExtension') : item.command.source === 'prompt' ? t('composer.sourcePrompt') : t('composer.sourceSkill')}
+                        </span>
+                      </button>
+                    ) : (
+                      <button
+                        key={`a:${item.value}`}
+                        className={cn(
+                          'flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs text-ink transition-colors',
+                          i === popupIndex ? 'bg-fill-hover' : 'hover:bg-fill-hover',
+                        )}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => acceptArgument(item.value)}
+                      >
+                        <span className="shrink-0 font-medium">{item.label}</span>
+                        {item.description && <span className="min-w-0 flex-1 truncate text-ink2">{item.description}</span>}
+                      </button>
+                    ),
+                  )}
+                </>
               )}
             </div>
           )}
