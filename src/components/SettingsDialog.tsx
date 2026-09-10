@@ -666,14 +666,16 @@ function RuntimesSection({ runtimes, onRefresh }: { runtimes: SettingsRuntime[];
         <button
           className={cn(
             'flex h-6 w-10 items-center rounded-full border-[0.5px] border-line px-0.5 transition-colors',
-            listener?.listenerEnabled ? 'justify-end bg-accent' : 'justify-start bg-canvas',
+            // Off = --raised, the inset-well grey: --canvas made the white knob
+            // (bg-white) invisible in light mode; 20px keeps the ring concentric.
+            listener?.listenerEnabled ? 'justify-end bg-accent' : 'justify-start bg-raised',
             listenerBusy && 'opacity-40',
           )}
           title={confirmDisable ? t('settings.disableListenerConfirm') : t('settings.allowRemote')}
           disabled={listenerBusy || listener === null}
           onClick={() => void toggleListener(!listener?.listenerEnabled)}
         >
-          <span className="size-4 rounded-full bg-white shadow-sm" />
+          <span className="size-5 rounded-full bg-white shadow-sm" />
         </button>
       </section>
 
