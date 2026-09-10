@@ -102,12 +102,30 @@ class StrictJsonlDecoder {
 // Probe the conventional tool dirs once and prepend the existing ones.
 let guiPathPrefix: string | null | undefined
 
+/**
+ * nvm's version directories, newest node first. A plain `sort()` is
+ * lexicographic, so it ranks "v9.11.0" ABOVE "v22.23.1" — which would put an
+ * ancient node first on PATH and make every `pi` spawn (shebang
+ * `#!/usr/bin/env node`) run under it. Compare the numbers instead.
+ */
+export function nvmVersionDirsNewestFirst(names: string[]): string[] {
+  const parts = (name: string): number[] => name.replace(/^v/, '').split('.').map((n) => Number(n) || 0)
+  return [...names].sort((a, b) => {
+    const x = parts(a)
+    const y = parts(b)
+    for (let i = 0; i < 3; i++) {
+      if ((x[i] ?? 0) !== (y[i] ?? 0)) return (y[i] ?? 0) - (x[i] ?? 0)
+    }
+    return 0
+  })
+}
+
 function guiPathPrefixDirs(): string[] {
   const home = homedir()
   const dirs = ['/usr/local/bin', '/opt/homebrew/bin', '/opt/homebrew/sbin', '/usr/local/sbin', join(home, '.local', 'bin'), join(home, '.npm-global', 'bin'), join(home, '.bun', 'bin'), join(home, '.volta', 'bin')]
   try {
     // Newest nvm node first; all installed versions stay resolvable.
-    for (const version of readdirSync(join(home, '.nvm', 'versions', 'node')).sort().reverse()) {
+    for (const version of nvmVersionDirsNewestFirst(readdirSync(join(home, '.nvm', 'versions', 'node')))) {
       dirs.push(join(home, '.nvm', 'versions', 'node', version, 'bin'))
     }
   } catch {
@@ -277,6 +295,18 @@ export interface RpcRuntimeCallbacks {
   onExit: (runtime: PiRpcRuntime) => void
 }
 
+/**
+ * True when a runtime died because one of pi's extensions refused to load.
+ * pi treats that as fatal and exits before answering, so this is the one
+ * startup failure the daemon can work around (daemon/agent.ts retries with
+ * --no-extensions). The message carries pi's own stderr line, see the exit
+ * handler below.
+ */
+export function isExtensionLoadFailure(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return /Failed to load extension/i.test(message)
+}
+
 export class PiRpcRuntime {
   readonly runtimeId = randomUUID()
   private readonly child: ChildProcess
@@ -294,6 +324,9 @@ export class PiRpcRuntime {
   // treat the turn as finished.
   private continuationPending = false
   private retryPending = false
+  /** Spawned with --no-extensions: pi's own extensions were skipped to survive
+   * a broken/incompatible one (see daemon/agent.ts). Reported via snapshot(). */
+  private readonly extensionsDisabled: boolean
 
   constructor(
     executable: string,
@@ -302,6 +335,7 @@ export class PiRpcRuntime {
     private readonly callbacks: RpcRuntimeCallbacks,
     extraEnvironment: NodeJS.ProcessEnv = {},
   ) {
+    this.extensionsDisabled = args.includes('--no-extensions')
     this.info = { runtimeId: this.runtimeId, cwd, isStreaming: false, isCompacting: false }
     this.child = spawn(executable, args, {
       cwd,
@@ -377,7 +411,11 @@ export class PiRpcRuntime {
 
   snapshot(): RuntimeInfo {
     const streaming = this.info.isStreaming || this.continuationPending || this.retryPending
-    return Object.freeze({ ...this.info, isStreaming: streaming })
+    return Object.freeze({
+      ...this.info,
+      isStreaming: streaming,
+      ...(this.extensionsDisabled ? { extensionsDisabled: true } : {}),
+    })
   }
 
   /** Performs the protocol handshake: get_state. */

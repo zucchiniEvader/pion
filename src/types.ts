@@ -314,6 +314,9 @@ export interface RuntimeInfo {
   isCompacting?: boolean
   thinkingLevel?: string
   model?: PiModelInfo | null
+  /** Started with --no-extensions because one of pi's extensions failed to
+   * load; the rest of the user's extensions are unavailable in this runtime. */
+  extensionsDisabled?: boolean
 }
 
 // ──────────────────────────────────────────────────────────────────────────

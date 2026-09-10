@@ -312,6 +312,10 @@ export function useSessionPool() {
           patchSession(info.runtimeId, (s) => ({ ...s, hydrating: false }))
         }
       }
+      // pi refused to load one of the user's extensions, so this runtime had to
+      // start with discovery off (daemon/agent.ts): their extension is silently
+      // absent, which is worth saying out loud instead of leaving them puzzled.
+      if (info.extensionsDisabled) setError('err.pi.extensionsDisabled')
       return info
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))

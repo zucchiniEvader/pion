@@ -20,6 +20,9 @@ export const zh = {
   // —— main 进程业务报错（第二轮补齐：打开项目 / kanban 派发路径）——
   'err.project.missingDir': '目录不存在或已被移动。',
   'err.pi.notFound': '未找到 {name}，请先安装。',
+  'err.pi.noModels': 'pi 还没有可用的模型：在终端运行 pi 后执行 /login 登录 provider，或先配置 API key。',
+  'err.pi.modelsUnparsed': '无法解析 pi 的模型列表。可在终端运行 `pi --offline --list-models` 看看原因。',
+  'err.pi.extensionsDisabled': 'pi 的某个扩展加载失败，本次会话已改用 --no-extensions 启动：该扩展在 Pion 里暂时不可用，建议升级或移除它。',
   'err.kanban.alreadyUnassigned': '卡片已在未分配区。',
   'err.kanban.dispatchArchived': '卡片已归档，不能派发。',
   'err.kanban.dispatchRunning': '该卡片正在执行中，不能重复派发。',

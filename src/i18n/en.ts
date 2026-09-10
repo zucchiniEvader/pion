@@ -17,6 +17,9 @@ export const en: Record<MsgKey, string> = {
   // —— main-process business errors (round 2: open-project / kanban dispatch paths) ——
   'err.project.missingDir': 'The directory does not exist or has been moved.',
   'err.pi.notFound': 'Could not find {name} — install it first.',
+  'err.pi.noModels': 'pi has no models available. Run pi in a terminal and use /login, or configure an API key.',
+  'err.pi.modelsUnparsed': 'Could not parse pi’s model list. Run `pi --offline --list-models` in a terminal to see why.',
+  'err.pi.extensionsDisabled': 'One of pi’s extensions failed to load, so this session started with --no-extensions: that extension is unavailable in Pion. Update or remove it.',
   'err.kanban.alreadyUnassigned': 'This card is already in the unassigned pool.',
   'err.kanban.dispatchArchived': 'This card is archived and cannot be dispatched.',
   'err.kanban.dispatchRunning': 'This card is already running and cannot be dispatched again.',

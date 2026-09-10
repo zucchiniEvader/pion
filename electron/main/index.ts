@@ -560,12 +560,17 @@ function registerIpc(): void {
         (err, stdout) => (err ? reject(err) : resolve(stdout)),
       )
     })
+    // pi answers "No models available. Use /login to log into a provider…" on
+    // stdout with exit 0 when nothing is authenticated. That is a
+    // user-actionable state, not a parse failure — report it as an err.* code so
+    // the renderer shows translated text instead of a raw English string.
+    if (/no models available/i.test(stdout)) throw new Error('err.pi.noModels')
     const models: PiAvailableModel[] = []
     for (const line of stdout.split('\n').slice(1)) {
       const m = /^(\S+)\s+(\S+)/.exec(line)
       if (m) models.push({ provider: m[1]!, id: m[2]! })
     }
-    if (!models.length) throw new Error('pi --list-models returned no models.')
+    if (!models.length) throw new Error('err.pi.modelsUnparsed')
     modelsCatalogCache = models
     return models
   })

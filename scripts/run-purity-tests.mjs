@@ -18,6 +18,7 @@ const suites = [
   { entry: 'src/i18n/resolve.ts', bundle: 'i18nResolve.bundle.mjs', test: 'scripts/i18n-resolve.purity.test.mjs' },
   { entry: 'src/lib/reltime.ts', bundle: 'reltime.bundle.mjs', test: 'scripts/reltime.purity.test.mjs' },
   { entry: 'src/lib/piVersion.ts', bundle: 'piVersion.bundle.mjs', test: 'scripts/pi-version.purity.test.mjs' },
+  { entry: 'daemon/pi-rpc.ts', bundle: 'piRpc.bundle.mjs', test: 'scripts/nvm-versions.purity.test.mjs' },
   { entry: 'electron/main/window-bounds.ts', bundle: 'windowBounds.bundle.mjs', test: 'scripts/window-bounds.purity.test.mjs' },
 ]
 
