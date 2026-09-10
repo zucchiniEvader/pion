@@ -224,7 +224,11 @@ export async function detectPi(): Promise<{ path: string | null; version: string
       break
     }
   }
-  if (!resolved) resolved = await whichFromPath(process.env)
+  // Search the PATH the spawned child will actually get — augmented with the
+  // homebrew/nvm/bun/volta bins — rather than the minimal one a Finder-launched
+  // app inherits: pi installed under an nvm node version is reachable only
+  // there. Same PATH as the spawn keeps "found" and "runnable" in agreement.
+  if (!resolved) resolved = await whichFromPath(safeChildEnvironment())
   if (!resolved) return { path: null, version: null }
   const version = await piVersion(resolved).catch(() => null)
   detectedPi = { path: resolved, version }
