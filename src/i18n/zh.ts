@@ -163,6 +163,9 @@ export const zh = {
 
   // —— SessionHeader（分支/Worktree 与外部打开）——
   'header.showSidebar': '显示边栏',
+  'header.hideSidebar': '收起边栏',
+  'header.back': '返回',
+  'header.forward': '前进',
   'header.branchWorktree': '分支与 Worktree',
   'header.newWorktree': '新建 Worktree',
   'header.newWorktreeDots': '新建 Worktree…',

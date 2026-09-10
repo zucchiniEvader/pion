@@ -161,6 +161,9 @@ export const en: Record<MsgKey, string> = {
 
   // —— SessionHeader (branches/worktrees, open externally) ——
   'header.showSidebar': 'Show sidebar',
+  'header.hideSidebar': 'Hide sidebar',
+  'header.back': 'Back',
+  'header.forward': 'Forward',
   'header.branchWorktree': 'Branches & worktrees',
   'header.newWorktree': 'New worktree',
   'header.newWorktreeDots': 'New worktree…',

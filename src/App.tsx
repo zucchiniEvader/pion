@@ -4,6 +4,7 @@ import { useSessionPool } from '@/hooks/useSessionPool'
 import { deriveTodoState } from '@/lib/eventReducer'
 import { isHomeSurfaceUp, isInertDraft, judgePrewarm, resolveViewedSessionFile, shouldStartPrewarm } from '@/lib/draftDecision'
 import { Sidebar } from '@/components/Sidebar'
+import { cn } from '@/lib/utils'
 import { SettingsDialog, type SettingsSection } from '@/components/SettingsDialog'
 import { RemoteAddDialog } from '@/components/RemoteAddDialog'
 import { Transcript } from '@/components/Transcript'
@@ -416,6 +417,41 @@ export default function App() {
     active,
     pool.pendingStart?.sessionPath,
   )
+
+  // Back/forward over view transitions (session ↔ board ↔ home). A location
+  // is just the two top-level states; entries whose session has since been
+  // removed are skipped instead of blocking navigation.
+  const [nav, setNav] = useState<{ stack: { view: 'session' | 'board'; path: string | null }[]; idx: number }>({
+    stack: [{ view: 'session', path: null }],
+    idx: 0,
+  })
+  useEffect(() => {
+    const loc = { view: mainView, path: mainView === 'board' ? null : activeSessionPath ?? null }
+    setNav(({ stack, idx }) => {
+      const cur = stack[idx]
+      // Applying a history entry re-enters here with an unchanged location: no push.
+      if (cur && cur.view === loc.view && cur.path === loc.path) return { stack, idx }
+      return { stack: [...stack.slice(0, idx + 1), loc], idx: idx + 1 }
+    })
+  }, [mainView, activeSessionPath])
+  const navGo = (dir: -1 | 1) => {
+    const { stack, idx } = nav
+    const next = idx + dir
+    if (next < 0 || next >= stack.length) return
+    const target = stack[next]
+    if (target.view === 'board') {
+      setMainView('board')
+    } else {
+      // path=null is the home surface (no session) — a legal destination.
+      setMainView('session')
+      if (target.path) {
+        const rec = Object.values(sessionsByPath).flat().find((s) => s.filePath === target.path) ?? null
+        if (!rec) return // target session no longer exists — stay put
+        void openSession(rec)
+      }
+    }
+    setNav({ stack, idx: next })
+  }
   // Per-session running/unread state keyed by session file, so the sidebar
   // can show a spinner on background runs and a badge on finished-but-unseen
   // ones — not just the foreground session.
@@ -533,7 +569,12 @@ export default function App() {
 
   return (
     <div className="flex h-full overflow-hidden bg-canvas text-ink">
-      {sidebarOpen && (
+      <div
+        className={cn(
+          'h-full shrink-0 overflow-hidden transition-[width] duration-200 ease-out',
+          sidebarOpen ? 'w-[300px]' : 'w-0',
+        )}
+      >
         <Sidebar
           meta={meta}
           projects={projects}
@@ -558,8 +599,13 @@ export default function App() {
           onArchiveSession={archiveSession}
           onUnarchiveSession={unarchiveSession}
           onRemoveProject={(p) => void removeProject(p)}
+          onCollapse={() => setSidebarOpen(false)}
+          navBack={nav.idx > 0}
+          navForward={nav.idx < nav.stack.length - 1}
+          onNavBack={() => navGo(-1)}
+          onNavForward={() => navGo(1)}
         />
-      )}
+      </div>
 
       <main className="relative flex min-w-0 flex-1 flex-col">
         {/* The session titlebar is not part of the board surface. */}
@@ -567,6 +613,10 @@ export default function App() {
           <SessionHeader
             sidebarOpen={sidebarOpen}
             onOpenSidebar={() => setSidebarOpen(true)}
+            navBack={nav.idx > 0}
+            navForward={nav.idx < nav.stack.length - 1}
+            onNavBack={() => navGo(-1)}
+            onNavForward={() => navGo(1)}
             title={title}
             project={activeProject}
           />

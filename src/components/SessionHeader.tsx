@@ -6,6 +6,8 @@ import { Input } from '@/components/ui/input'
 import {
   Check,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   FolderOpen,
   Ghost,
   GitBranch,
@@ -17,6 +19,11 @@ import {
 interface SessionHeaderProps {
   sidebarOpen: boolean
   onOpenSidebar: () => void
+  /** Back/forward over view transitions; disabled flags come from App's history. */
+  navBack: boolean
+  navForward: boolean
+  onNavBack: () => void
+  onNavForward: () => void
   /** Session title; falls back to the project name in App. */
   title: string
   project: ProjectRecord | null
@@ -75,7 +82,7 @@ const capTitle = (t: string) => {
 // Session-page top bar: draggable chrome with the session title, static
 // project chip, branch/worktree dropdown, and the "open externally" icon
 // group (Finder / Ghostty / VS Code).
-export function SessionHeader({ sidebarOpen, onOpenSidebar, title, project }: SessionHeaderProps) {
+export function SessionHeader({ sidebarOpen, onOpenSidebar, navBack, navForward, onNavBack, onNavForward, title, project }: SessionHeaderProps) {
   const { t } = useI18n()
   const ue = useUserErrorMessage()
   const [branchMenuOpen, setBranchMenuOpen] = useState(false)
@@ -188,7 +195,13 @@ export function SessionHeader({ sidebarOpen, onOpenSidebar, title, project }: Se
   const hasOpenMenu = branchMenuOpen
 
   return (
-    <header className="drag relative flex h-12 shrink-0 items-center gap-3 border-b-[0.5px] border-line bg-canvas pl-4 pr-3">
+    <header
+      className={cn(
+        'drag relative flex h-12 shrink-0 items-center gap-3 border-b-[0.5px] border-line bg-canvas pl-4 pr-3',
+        // 侧栏收起后原生红绿灯落在本栏上,预留左侧空间;展开时由侧栏的拖拽条预留。
+        !sidebarOpen && 'traffic-inset',
+      )}
+    >
       {/* Click-away catcher for both menus. */}
       {hasOpenMenu && <div className="fixed inset-0 z-20" onClick={closeMenus} />}
       {!sidebarOpen && (
@@ -199,6 +212,28 @@ export function SessionHeader({ sidebarOpen, onOpenSidebar, title, project }: Se
         >
           <PanelLeftOpen size={16} strokeWidth={1.75} />
         </button>
+      )}
+      {/* Collapsed state: the sidebar strip (with the nav buttons) is hidden,
+          so reopen + history dock here. */}
+      {!sidebarOpen && (
+        <div className="flex shrink-0 items-center gap-0.5">
+          <button
+            className="no-drag rounded-md p-1.5 text-ink2 transition-colors hover:bg-fill-hover hover:text-ink disabled:pointer-events-none disabled:opacity-35"
+            title={t('header.back')}
+            disabled={!navBack}
+            onClick={onNavBack}
+          >
+            <ChevronLeft size={16} strokeWidth={1.75} />
+          </button>
+          <button
+            className="no-drag rounded-md p-1.5 text-ink2 transition-colors hover:bg-fill-hover hover:text-ink disabled:pointer-events-none disabled:opacity-35"
+            title={t('header.forward')}
+            disabled={!navForward}
+            onClick={onNavForward}
+          >
+            <ChevronRight size={16} strokeWidth={1.75} />
+          </button>
+        </div>
       )}
       {project && (
         <div className="flex min-w-0 flex-1 items-center gap-2.5">

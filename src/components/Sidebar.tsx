@@ -11,6 +11,8 @@ import {
   ArchiveRestore,
   ArrowUpCircle,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ExternalLink,
   Folder,
   FolderOpen,
@@ -18,6 +20,7 @@ import {
   MessageCirclePlus,
   MessageSquarePlus,
   Pencil,
+  PanelLeftClose,
   Plus,
   Settings,
   SquareKanban,
@@ -67,6 +70,12 @@ interface SidebarProps {
   /** Promotes an archived session back into the regular list. */
   onUnarchiveSession: (session: SessionRecord) => void
   onRemoveProject: (project: ProjectRecord) => void
+  onCollapse: () => void
+  /** Back/forward over view transitions; disabled flags come from App's history. */
+  navBack: boolean
+  navForward: boolean
+  onNavBack: () => void
+  onNavForward: () => void
 }
 
 // Full-height navigation rail: projects as expandable groups, their tasks
@@ -98,6 +107,11 @@ export function Sidebar({
   onArchiveSession,
   onUnarchiveSession,
   onRemoveProject,
+  onCollapse,
+  navBack,
+  navForward,
+  onNavBack,
+  onNavForward,
 }: SidebarProps) {
   // Which project groups are expanded; the active project follows selection.
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set())
@@ -160,8 +174,32 @@ export function Sidebar({
 
   return (
     <aside className="flex h-full w-[300px] shrink-0 flex-col border-r border-line bg-panel">
-      {/* Drag strip carrying the traffic lights. */}
-      <div className="drag traffic-inset-tight flex h-12 shrink-0 items-center gap-0.5 px-2" />
+      {/* Drag strip: traffic lights (native, left), view history + collapse docked right. */}
+      <div className="drag traffic-inset-tight flex h-12 shrink-0 items-center gap-0.5 px-2">
+        <button
+          className="no-drag rounded-md p-1.5 text-ink2 transition-colors hover:bg-fill-hover hover:text-ink disabled:pointer-events-none disabled:opacity-35"
+          title={t('header.back')}
+          disabled={!navBack}
+          onClick={onNavBack}
+        >
+          <ChevronLeft size={16} strokeWidth={1.75} />
+        </button>
+        <button
+          className="no-drag rounded-md p-1.5 text-ink2 transition-colors hover:bg-fill-hover hover:text-ink disabled:pointer-events-none disabled:opacity-35"
+          title={t('header.forward')}
+          disabled={!navForward}
+          onClick={onNavForward}
+        >
+          <ChevronRight size={16} strokeWidth={1.75} />
+        </button>
+        <button
+          className="no-drag ml-auto rounded-md p-1.5 text-ink2 transition-colors hover:bg-fill-hover hover:text-ink"
+          title={t('header.hideSidebar')}
+          onClick={onCollapse}
+        >
+          <PanelLeftClose size={16} strokeWidth={1.75} />
+        </button>
+      </div>
 
       {/* OverlayScrollArea hides the native scrollbar (styled webkit bars take
           layout width, which squeezed rows and reflowed the list on expand);
