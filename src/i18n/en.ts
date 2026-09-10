@@ -177,6 +177,7 @@ export const en: Record<MsgKey, string> = {
   'transcript.retrying': 'Model call failed — retrying automatically…',
   'transcript.retried': 'Recovered automatically — continuing',
   'transcript.imageTooLarge': '(Image too large — preview not loaded)',
+  'transcript.localCommand': 'Local command',
 
   // —— TodoPanel ——
   'todo.expand': 'Expand task list',

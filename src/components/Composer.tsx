@@ -13,6 +13,9 @@ const FALLBACK_THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'ma
 // Same image contract as the preload allowlist: at most 8 attachments per
 // dispatch, and only the MIME types PI accepts on the wire.
 const MAX_IMAGES = 8
+// Extension status chips are ambient information, not a dashboard: the row
+// keeps room for the model/thinking chips and the send button.
+const MAX_STATUS_CHIPS = 3
 const IMAGE_MIME = /^image\/(png|jpeg|gif|webp)$/i
 
 // A pasted image waiting to be sent. `data` is the canonical base64 payload
@@ -72,6 +75,9 @@ interface ComposerProps {
   onGetCommands: () => Promise<PiCommandInfo[]>
   /** Plan-mode status text from the runtime's statuses (empty = off). */
   planStatus?: string | null
+  /** Other extension statuses (`setStatus`) to show as chips: MCP reports its
+   * server state this way. The composer shows the first few. */
+  extensionStatuses?: Array<{ key: string; text: string }>
   // Draft-only: the project selector embedded in the composer card.
   projects: ProjectRecord[]
   activeProject: ProjectRecord | null
@@ -147,6 +153,7 @@ export function Composer({
   onGetThinkingLevels,
   onGetCommands,
   planStatus,
+  extensionStatuses = [],
   projects,
   activeProject,
   nudgeSignal,
@@ -410,7 +417,11 @@ export function Composer({
   // anything else completes the name and leaves room for arguments.
   const acceptSlashItem = (item: PiCommandInfo) => {
     const full = `/${item.name}`
-    if (draft.trim() === full) void send('prompt')
+    // Enter on an exactly-typed command sends it. Case is folded for the
+    // comparison but the CANONICAL spelling is what goes out: pi matches
+    // extension commands case-sensitively, so "/MCP" typed by hand must be
+    // sent as "/mcp" (otherwise it reaches the model as plain text).
+    if (draft.trim().toLowerCase() === full.toLowerCase()) void send('prompt', full)
     else onDraftChange(`${full} `)
   }
 
@@ -489,6 +500,17 @@ export function Composer({
               <span className="text-ink2">{PLAN_STATUS_KEY[planStatus] ? t(PLAN_STATUS_KEY[planStatus]) : planStatus}</span>
             </div>
           )}
+          {/* Extension statuses, e.g. pi-mcp-adapter's server summary. Truncated
+               rather than wrapped: the row must not grow the composer. */}
+          {extensionStatuses.slice(0, MAX_STATUS_CHIPS).map((s) => (
+            <div
+              key={s.key}
+              className="flex w-fit max-w-[180px] items-center rounded-md bg-fill-hover px-1.5 py-1 text-xs text-ink2"
+              title={`${s.key}: ${s.text}`}
+            >
+              <span className="truncate">{s.text}</span>
+            </div>
+          ))}
         </div>
         <div className="relative">
           {slashOpen && (

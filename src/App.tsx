@@ -539,6 +539,14 @@ export default function App() {
     return null
   })()
 
+  // Every other extension status (pi-mcp-adapter reports its servers this way,
+  // `setStatus("mcp", "🔌 MCP: 3/4 …")`) becomes a chip in the composer row.
+  // pi clears a status by sending undefined, which the pool already flattens
+  // to an empty string.
+  const extensionStatuses = Object.entries(active?.statuses ?? {})
+    .filter(([key, value]) => !!value && !key.includes('plan'))
+    .map(([key, value]) => ({ key, text: value }))
+
   const crashed = !composingNew && !!active?.crashed
 
   // The active runtime is an untouched prewarm (no session file, no messages,
@@ -750,6 +758,7 @@ export default function App() {
               onGetCommands={() =>
                 active?.runtime ? pool.getAvailableCommands(active.runtime.runtimeId) : Promise.resolve([])}
               planStatus={composingNew ? null : planStatus}
+              extensionStatuses={composingNew ? [] : extensionStatuses}
               projects={projects}
               activeProject={activeProject}
               nudgeSignal={projectNudge}

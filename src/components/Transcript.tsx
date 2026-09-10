@@ -1,5 +1,5 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import type { MessagePart, ThinkingPart, TranscriptMessage } from '@/lib/eventReducer'
+import type { MessagePart, NoticePart, ThinkingPart, TranscriptMessage } from '@/lib/eventReducer'
 import { fmtDur } from '@/lib/reltime'
 import { useI18n, type TFn } from '@/i18n'
 import { zh, type MsgKey } from '@/i18n/zh'
@@ -128,6 +128,38 @@ function StatusLine({ text }: { text: string }) {
   )
 }
 
+// Extension text (`ctx.ui.notify`) and Pion's own local echo of an extension
+// command. Left-aligned and unformatted on purpose: status dumps like `/mcp`'s
+// arrive as indented lists, so line breaks and spacing have to survive.
+const NOTICE_TONE: Record<NoticePart['tone'], string> = {
+  info: 'border-line bg-panel text-ink',
+  warning: 'border-transparent bg-tint-warn text-warn',
+  error: 'border-transparent bg-tint-bad text-bad',
+  command: '',
+}
+
+function NoticeBlock({ part }: { part: NoticePart }) {
+  const { t } = useI18n()
+  if (part.tone === 'command') {
+    return (
+      <div className="flex items-baseline gap-2 text-[11px] text-ink2">
+        <span className="font-mono">{part.text}</span>
+        <span className="shrink-0 rounded bg-fill-hover px-1.5 py-px text-[10px]">{t('transcript.localCommand')}</span>
+      </div>
+    )
+  }
+  return (
+    <div
+      className={cn(
+        'w-fit max-w-[92%] whitespace-pre-wrap break-words rounded-lg border-[0.5px] px-3 py-2 font-mono text-[11px] leading-[1.55]',
+        NOTICE_TONE[part.tone],
+      )}
+    >
+      {part.text}
+    </div>
+  )
+}
+
 // memo: editRow 只克隆被事件触碰的那一行，未动行的对象身份不变，
 // 流式 delta 就不会重渲染整份 transcript（长会话流式时 renderer CPU O(N)→O(1)）。
 const MessageBlock = memo(function MessageBlock({ msg }: { msg: TranscriptMessage }) {
@@ -158,6 +190,18 @@ const MessageBlock = memo(function MessageBlock({ msg }: { msg: TranscriptMessag
     )
   }
   if (msg.role === 'system') {
+    // Notices are their own left-aligned rows; the lifecycle statuses below
+    // stay the centred hairline row they have always been.
+    const notices = msg.parts.filter((p): p is NoticePart => p.type === 'notice')
+    if (notices.length > 0) {
+      return (
+        <div className="mt-2 flex flex-col gap-1.5">
+          {notices.map((p, i) => (
+            <NoticeBlock key={i} part={p} />
+          ))}
+        </div>
+      )
+    }
     return (
       <div className="self-center px-8 py-1 text-center text-xs text-ink2">
         {msg.parts.map((p, i) =>

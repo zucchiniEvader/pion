@@ -11,7 +11,7 @@ import { rm, stat } from 'node:fs/promises'
 import { watch, existsSync, type FSWatcher } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import type { AgentStartOptions, PiEventEnvelope, RpcCommand, RuntimeInfo } from '../src/types'
+import type { AgentStartOptions, PiEvent, PiEventEnvelope, RpcCommand, RuntimeInfo } from '../src/types'
 import { PiRpcRuntime, detectPi, invalidatePiDetection, isExtensionLoadFailure } from './pi-rpc'
 import { piSessionRoot, sessionBucket, trackSession } from './sessions'
 import { DaemonRpcError, type DaemonServer } from './server'
@@ -71,6 +71,14 @@ interface Prewarm {
   // Events from an unbound prewarm would materialize a ghost session in the
   // renderer pool; forwarding is gated on this until the runtime is adopted.
   bound: boolean
+  // Statuses the boot published while unbound, keyed by statusKey and replayed
+  // on adopt. Status is idempotent state (pi-mcp-adapter announces its server
+  // inventory this way, ponytail its mode), so a session that adopts a prewarm
+  // must end up exactly as informed as a cold-spawned one — otherwise the
+  // extension's chip silently never appears. Notices are NOT buffered: they are
+  // events about a boot the user never watched, and replaying one minutes later
+  // reads as a fresh message.
+  pendingStatuses: Map<string, PiEvent>
   // Wall-clock spawn time. pi snapshots settings.json (default model
   // included) and auth.json (credentials) once per process at boot, so a
   // prewarm born before either change would serve the old default model or an
@@ -162,11 +170,18 @@ export async function ensurePrewarm(projectPath: string): Promise<void> {
       projectPath,
       scratchFile: null,
       bound: false,
+      pendingStatuses: new Map(),
       bornAt: Date.now(),
     }
     const spawned = await spawnRuntime(detected.path, { projectPath }, {
       onEvent: (envelope) => {
-        if (entry.bound) forwardRuntimeEvent(envelope)
+        if (entry.bound) {
+          forwardRuntimeEvent(envelope)
+          return
+        }
+        if (envelope.event.type === 'extension_ui_request' && envelope.event.method === 'setStatus') {
+          entry.pendingStatuses.set(String(envelope.event.statusKey ?? ''), envelope.event)
+        }
       },
       onExit: handleRuntimeExit,
     })
@@ -344,6 +359,14 @@ async function performStart(options: AgentStartOptions): Promise<RuntimeInfo> {
         // falls back to a cold spawn below.
         if (info.sessionFile && (!binding || info.sessionFile === options.sessionPath)) {
           entry.bound = true
+          // Replay what the boot published while this prewarm was invisible, so
+          // an adopted session ends up with the same extension state as a
+          // cold-spawned one. Synchronous: frames arriving from here on take
+          // the direct path above and must not overtake these older ones.
+          for (const event of entry.pendingStatuses.values()) {
+            forwardRuntimeEvent({ runtimeId: entry.runtime.runtimeId, event })
+          }
+          entry.pendingStatuses.clear()
           runtimes.set(entry.runtime.runtimeId, entry.runtime)
           sessionRuntimeByFile.set(info.sessionFile, entry.runtime.runtimeId)
           onSessionRestarted(info.sessionFile)

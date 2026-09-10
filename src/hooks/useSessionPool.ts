@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import type { AgentStartOptions, ContextUsage, PiAvailableModel, PiCommandInfo, PiEventEnvelope, PromptImage, RuntimeInfo } from '@/types'
-import { applyEvent, createTranscript, hydrateTranscript, needsHistoryHydration, type TranscriptMessage } from '@/lib/eventReducer'
+import { applyEvent, appendNotice, createTranscript, hydrateTranscript, needsHistoryHydration, type TranscriptMessage } from '@/lib/eventReducer'
 import { useI18n } from '@/i18n'
 
 export type RuntimeStatus = 'idle' | 'running' | 'starting' | 'stopping' | 'error'
@@ -71,6 +71,12 @@ const INTERACTIVE_METHODS = new Set(['confirm', 'input', 'select', 'editor'])
 const ANSI_RE = /\x1b\[[0-9;]*m/g
 function stripAnsi(value: unknown): string {
   return typeof value === 'string' ? value.replace(ANSI_RE, '') : ''
+}
+
+// Extension notices carry notifyType info|warning|error; anything else (or a
+// missing field) reads as plain information.
+function noticeTone(value: unknown): 'info' | 'warning' | 'error' {
+  return value === 'warning' || value === 'error' ? value : 'info'
 }
 
 // Pool of per-runtime session states. Every PI event is routed by its
@@ -161,6 +167,11 @@ export function useSessionPool() {
             }
           } else if (method === 'setStatus') {
             ns.statuses = { ...s.statuses, [String(event.statusKey ?? '')]: stripAnsi(event.statusText) }
+          } else if (method === 'notify') {
+            // Fire-and-forget text from an extension — for several of them the
+            // only feedback that exists. Goes into the transcript so it can be
+            // re-read; pi's TUI shows the same text next to its editor.
+            ns.transcript = appendNotice(s.transcript, stripAnsi(event.message), noticeTone(event.notifyType))
           }
           // setWidget registers a widget surface; the MVP has no widget host,
           // so it is acknowledged silently rather than blocking.
@@ -363,6 +374,24 @@ export function useSessionPool() {
     patchSession(runtimeId, (s) => (s.unread ? { ...s, unread: false } : s))
   }, [patchSession])
 
+  // Runtime → command registry (extensions, prompt templates, skills), filled
+  // on first use: the composer's slash popup and the send-path echo share it,
+  // so the usual "type / + Enter" flow costs one round trip in total.
+  const commandsRef = useRef(new Map<string, PiCommandInfo[]>())
+  const loadCommands = useCallback(async (runtimeId: string): Promise<PiCommandInfo[]> => {
+    const cached = commandsRef.current.get(runtimeId)
+    if (cached) return cached
+    if (!sessionsRef.current.get(runtimeId)?.runtime) return []
+    try {
+      const res = await window.pi.agent.command(runtimeId, { type: 'get_commands' })
+      const list = (res.data as { commands?: PiCommandInfo[] } | undefined)?.commands ?? []
+      commandsRef.current.set(runtimeId, list)
+      return list
+    } catch {
+      return []
+    }
+  }, [])
+
   // Images are only valid on the prompt wire command (steer/follow_up carry
   // no images field), so they attach only when intent is 'prompt'.
   const send = useCallback(async (
@@ -377,6 +406,18 @@ export function useSessionPool() {
       const msg = t('session.runtimeGone')
       setError(msg)
       throw new Error(msg)
+    }
+    // Extension commands (/mcp, /plan, …) are intercepted by pi and produce no
+    // user message, no turn and nothing on disk — without a local echo the
+    // screen just empties and the history shows no trace of what was run. The
+    // echo is client-side only: pi never sees it and the session file keeps
+    // no trace (Pion does not copy transcripts).
+    if (intent === 'prompt' && message.startsWith('/')) {
+      const name = message.slice(1).split(/\s+/, 1)[0]
+      const commands = await loadCommands(runtimeId)
+      if (commands.some((c) => c.source === 'extension' && c.name === name)) {
+        patchSession(runtimeId, (s) => ({ ...s, transcript: appendNotice(s.transcript, message, 'command') }))
+      }
     }
     // Mark the dispatch before the round-trip: extension-intercepted messages
     // (/plan etc.) stream no events, so this flag is what moves the page off
@@ -413,7 +454,7 @@ export function useSessionPool() {
       setError(msg)
       throw e
     }
-  }, [patchSession, t])
+  }, [patchSession, loadCommands, t])
 
   const abort = useCallback(async (runtimeId: string) => {
     if (!sessionsRef.current.get(runtimeId)?.runtime) return
@@ -473,12 +514,15 @@ export function useSessionPool() {
 
   // Slash-command registry (extensions, prompt templates, skills). Execution
   // itself stays in PI: a prompt starting with "/" is expanded/interpreted
-  // by pi's own prompt path.
+  // by pi's own prompt path. Warm the shared cache on the way out so a send
+  // that follows the popup does not repeat the round trip.
   const getAvailableCommands = useCallback(async (runtimeId: string): Promise<PiCommandInfo[]> => {
     if (!sessionsRef.current.get(runtimeId)?.runtime) return []
     const res = await window.pi.agent.command(runtimeId, { type: 'get_commands' })
     const data = res.data as { commands?: PiCommandInfo[] } | undefined
-    return data?.commands ?? []
+    const list = data?.commands ?? []
+    commandsRef.current.set(runtimeId, list)
+    return list
   }, [])
 
   const stop = useCallback(async (runtimeId: string) => {

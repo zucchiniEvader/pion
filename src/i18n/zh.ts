@@ -179,6 +179,7 @@ export const zh = {
   'transcript.retrying': '模型调用失败，正在自动重试…',
   'transcript.retried': '已自动恢复，继续执行',
   'transcript.imageTooLarge': '（图片过大，未加载预览）',
+  'transcript.localCommand': '本地命令',
 
   // —— TodoPanel ——
   'todo.expand': '展开任务列表',

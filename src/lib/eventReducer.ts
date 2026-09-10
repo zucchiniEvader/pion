@@ -67,6 +67,18 @@ export interface StatusPart {
   text: string
 }
 
+/** Free-form text an extension pushed with `ctx.ui.notify(text, tone)`, or a
+ * local echo of an extension command Pion sent (tone `command`). pi streams
+ * these as `extension_ui_request { method: 'notify' }` and for several
+ * extensions they are the ONLY feedback that ever exists (`/mcp`, plan-mode,
+ * pi-subagents …). Rendered as its own left-aligned row: multi-line status
+ * dumps must keep their line breaks and indentation. */
+export interface NoticePart {
+  type: 'notice'
+  text: string
+  tone: 'info' | 'warning' | 'error' | 'command'
+}
+
 /** User-attached image (base64 payload, no data: URL prefix). */
 export interface ImagePart {
   type: 'image'
@@ -74,7 +86,7 @@ export interface ImagePart {
   mimeType: string
 }
 
-export type MessagePart = TextPart | ThinkingPart | ToolCallPart | ErrorPart | StatusPart | ImagePart
+export type MessagePart = TextPart | ThinkingPart | ToolCallPart | ErrorPart | StatusPart | NoticePart | ImagePart
 
 export interface TranscriptMessage {
   id: string
@@ -161,6 +173,16 @@ function upsertSystemStatus(messages: TranscriptMessage[], id: string, text: str
   const idx = messages.findIndex((m) => m.id === id)
   if (idx >= 0) messages[idx] = row
   else messages.push(row)
+}
+
+/** Appends an extension notice as its own row. Returns a NEW array: callers run
+ * inside StrictMode-invoked state updaters, where mutating the previous
+ * transcript would double the row. */
+export function appendNotice(messages: TranscriptMessage[], text: string, tone: NoticePart['tone']): TranscriptMessage[] {
+  const trimmed = text.trim()
+  if (!trimmed) return messages
+  const id = `notice-${tone}-${messages.length}-${Date.now()}`
+  return [...messages, { id, role: 'system', parts: [{ type: 'notice', text: trimmed, tone }] }]
 }
 
 // ── Copy-on-write helpers ────────────────────────────────────────────────
