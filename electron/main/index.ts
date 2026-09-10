@@ -30,6 +30,7 @@ import type {
 import { IPC } from '../../src/types'
 import { detectPi, safeChildEnvironment } from '../../daemon/pi-rpc'
 import { daemons } from './daemon-client'
+import { initUpdater } from './updater'
 import type { DaemonConnection } from './daemon-client'
 
 let mainWindow: BrowserWindow | null = null
@@ -682,6 +683,7 @@ app.whenReady().then(async () => {
     app.dock?.setIcon(join(app.getAppPath(), 'assets', 'pion-logo.png'))
   }
   registerIpc()
+  initUpdater()
   // Daemon (goal.md v3 §7): every business handler forwards through it, so
   // boot awaits readiness (node-bundle spawn + hello_ok + ping — fast). On
   // failure boot still continues and every dependent call fails visibly

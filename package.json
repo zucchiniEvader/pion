@@ -29,7 +29,7 @@
     "daemon:package": "node scripts/package-daemon.mjs",
     "postinstall": "node scripts/patch-dock-name.mjs",
     "dist": "npm run build && electron-builder --mac --publish never",
-    "dist:dir": "npm run build && electron-builder --mac --dir --publish never"
+    "dist:dir": "npm run build && electron-builder --mac --dir"
   },
   "devDependencies": {
     "@base-ui/react": "^1.7.0",
@@ -56,5 +56,8 @@
     "uqr": "^0.1.3",
     "vite": "^6.0.0",
     "ws": "^8.21.3"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
   }
 }

@@ -28,6 +28,7 @@ import type {
   SettingsStatus,
   SettingsRuntimeChange,
   UpdateCheckResult,
+  AppUpdateStatus,
   UpdateProgressEvent,
   ThemeSetting,
   GuiUpdateInfo,
@@ -216,6 +217,17 @@ const api: PiGuiApi = {
       return invoke<void>(IPC.APP_SET_THEME, theme)
     },
     guiUpdate: () => invoke<GuiUpdateInfo>(IPC.APP_GUI_LATEST),
+    appUpdate: {
+      status: () => invoke<AppUpdateStatus>(IPC.APP_UPDATE_STATUS),
+      check: () => invoke<AppUpdateStatus>(IPC.APP_UPDATE_CHECK),
+      download: () => invoke<AppUpdateStatus>(IPC.APP_UPDATE_DOWNLOAD),
+      install: () => invoke<void>(IPC.APP_UPDATE_INSTALL),
+      onStatus: (cb: (s: AppUpdateStatus) => void) => {
+        const listener = (_e: Electron.IpcRendererEvent, s: AppUpdateStatus) => cb(s)
+        ipcRenderer.on(IPC.APP_UPDATE_STATUS, listener)
+        return () => ipcRenderer.removeListener(IPC.APP_UPDATE_STATUS, listener)
+      },
+    },
     providersLocal: () => invoke<ProvidersLocalResult>(IPC.APP_PROVIDERS_LOCAL),
     modelsList: () => invoke<PiAvailableModel[]>(IPC.APP_MODELS_LIST),
     setDefaultModel: (provider: string, modelId: string) =>

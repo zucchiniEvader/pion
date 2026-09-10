@@ -22,6 +22,7 @@ import {
 import { encode } from 'uqr'
 import type {
   AppMeta,
+  AppUpdateStatus,
   GuiUpdateInfo,
   PiAvailableModel,
   ProvidersLocalResult,
@@ -1037,11 +1038,14 @@ function UpdatesSection({ meta, update }: { meta: AppMeta | null; update: Settin
   const [copied, setCopied] = useState(false)
   const [log, setLog] = useState<string[]>([])
   const logRef = useRef<HTMLDivElement | null>(null)
+  const [appUp, setAppUp] = useState<AppUpdateStatus | null>(null)
   const updating = progress?.running === true
   const finished = progress?.done === true
 
   useEffect(() => {
     void window.pi.app.guiUpdate().then(setGui).catch(() => undefined)
+    void window.pi.app.appUpdate.status().then(setAppUp).catch(() => undefined)
+    return window.pi.app.appUpdate.onStatus(setAppUp)
   }, [])
 
   useEffect(() => {
@@ -1088,16 +1092,45 @@ function UpdatesSection({ meta, update }: { meta: AppMeta | null; update: Settin
 
       <ul className="flex flex-col gap-1">
         {/* GUI app row: current version; latest appears once a release feed
-            (package.json repository) is configured. */}
+            (package.json repository) is configured. In-app self-update:
+            check → download → restart-to-install (electron-updater). */}
         <li className="flex items-center gap-2 rounded-lg border-[0.5px] border-line bg-panel px-2.5 py-2 text-xs">
           <span className="shrink-0 rounded bg-tint-accent px-1 py-px text-[10px] font-medium text-accent">GUI</span>
           <span className="min-w-0 truncate font-medium text-ink">Pion</span>
           <span className="ml-auto shrink-0 tabular-nums text-ink2">
             {gui ? (gui.latest && guiOutdated ? `${gui.version} → ${gui.latest}` : t('settings.updates.currentVersion', { version: gui.version })) : '—'}
           </span>
-          {guiOutdated ? (
-            <span className="shrink-0 rounded bg-tint-warn px-1.5 py-px text-[10px] font-medium text-warn">{t('sidebar.updatesCount', { count: 1, s: '' })}</span>
-          ) : null}
+          {appUp?.state === 'downloading' ? (
+            <span className="shrink-0 rounded bg-tint-accent px-1.5 py-px text-[10px] font-medium tabular-nums text-accent">
+              {t('settings.updates.downloading', { percent: appUp.percent ?? 0 })}
+            </span>
+          ) : appUp?.state === 'downloaded' ? (
+            <button
+              className="shrink-0 rounded-md bg-accent px-2 py-1 text-[10px] font-medium text-white transition-colors hover:bg-accent-hover"
+              onClick={() => void window.pi.app.appUpdate.install()}
+            >
+              {t('settings.updates.restartToInstall')}
+            </button>
+          ) : (
+            <>
+              <button
+                className="shrink-0 rounded-md border-[0.5px] border-line px-2 py-1 text-[10px] font-medium text-ink2 transition-colors hover:bg-fill-hover hover:text-ink disabled:pointer-events-none disabled:opacity-50"
+                disabled={appUp?.state === 'checking' || appUp?.state === 'dev'}
+                title={appUp?.state === 'error' ? appUp.message : undefined}
+                onClick={() => void window.pi.app.appUpdate.check()}
+              >
+                {t('settings.updates.checkUpdate')}
+              </button>
+              {appUp?.state === 'available' && (
+                <button
+                  className="shrink-0 rounded-md bg-accent px-2 py-1 text-[10px] font-medium text-white transition-colors hover:bg-accent-hover"
+                  onClick={() => void window.pi.app.appUpdate.download()}
+                >
+                  {t('settings.updates.downloadUpdate')}
+                </button>
+              )}
+            </>
+          )}
           {gui?.releaseUrl && (
             <button
               className="grid size-5 shrink-0 place-items-center rounded text-ink2 transition-colors hover:bg-fill-hover hover:text-ink"

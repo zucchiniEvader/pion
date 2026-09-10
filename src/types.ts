@@ -71,6 +71,12 @@ export const IPC = {
   VERSION_CHECK_UPDATE: 'version-check:update',
   /** main→renderer push: streamed update output + lifecycle. */
   VERSION_CHECK_PROGRESS: 'version-check:progress',
+  // GUI self-update (electron-updater + GitHub Releases, settings Updates)
+  APP_UPDATE_CHECK: 'app:update-check',
+  APP_UPDATE_DOWNLOAD: 'app:update-download',
+  APP_UPDATE_INSTALL: 'app:update-install',
+  /** main→renderer push: state machine transitions. */
+  APP_UPDATE_STATUS: 'app:update-status',
   // settings (④ runtimes: local + remote daemon connections)
   SETTINGS_LIST: 'settings:list',
   SETTINGS_ADD_REMOTE: 'settings:add-remote',
@@ -121,6 +127,18 @@ export interface GuiUpdateInfo {
   /** Releases page URL when a repository is configured. */
   releaseUrl: string | null
   checkedAt: string
+}
+
+/** Self-update state machine (electron-updater, settings Updates). 'dev' =
+ * unpackaged run, which can never self-update. */
+export interface AppUpdateStatus {
+  state: 'dev' | 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'
+  /** Download progress 0..100 while state === 'downloading'. */
+  percent?: number
+  /** New version string once known. */
+  version?: string
+  /** Error message when state === 'error'. */
+  message?: string
 }
 
 /** One custom provider from the local pi's ~/.pi/agent/models.json (settings
@@ -568,6 +586,15 @@ export interface PiGuiApi {
     /** GUI latest-release probe (24h-cached in main; null latest when no
      * release feed is configured or offline). */
     guiUpdate: () => Promise<GuiUpdateInfo>
+    /** In-app self-update (electron-updater + GitHub Releases). */
+    appUpdate: {
+      status: () => Promise<AppUpdateStatus>
+      check: () => Promise<AppUpdateStatus>
+      download: () => Promise<AppUpdateStatus>
+      install: () => Promise<void>
+      /** Subscribes to state pushes; returns an unsubscribe function. */
+      onStatus: (cb: (s: AppUpdateStatus) => void) => () => void
+    }
     /** Read-only view of the local pi's custom providers (models.json). */
     providersLocal: () => Promise<ProvidersLocalResult>
     /** Full model catalog from `pi --list-models` (cached in main). */

@@ -23,6 +23,12 @@ extraResources:
   - from: out/daemon/index.cjs
     to: pion-daemon.cjs
 npmRebuild: false
+# 应用内升级(electron-updater):打包时据此生成 Resources/app-update.yml。
+# 发版:npm version x.y.z && git push --follow-tags && GH_TOKEN=... npm run dist -- --publish always
+publish:
+  provider: github
+  owner: zucchiniEvader
+  repo: pion
 mac:
   category: public.app-category.developer-tools
   icon: assets/pion-logo.png
@@ -33,6 +39,9 @@ mac:
   notarize: true
   target:
     - target: dmg
+      arch: [arm64]
+    # electron-updater 在 mac 上消费 zip(dmg 仅作首次安装介质)
+    - target: zip
       arch: [arm64]
 dmg:
   artifactName: Pion-${version}-${arch}.${ext}
