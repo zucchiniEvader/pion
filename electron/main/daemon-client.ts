@@ -155,6 +155,9 @@ class LocalConnection implements DaemonConnection {
   private pump = new FramePump()
   private readyListeners = new Set<() => void>()
   private everBooted = false
+  /** hello_ok seen for the CURRENT child: readiness, not mere liveness — the
+   * same distinction RemoteConnection draws with its handshake flag. */
+  private ready = false
   private quitting = false
   private respawnAttempt = 0
   private booted: ((err?: Error) => void) | null = null
@@ -162,7 +165,12 @@ class LocalConnection implements DaemonConnection {
   /** Extra daemon argv injected by the registry (the WS carrier for phone
    * clients). A getter, not a static list: the persisted per-install token
    * is only readable after the credentials file has loaded. */
-  constructor(private readonly extraArgs: () => string[] = () => []) {}
+  constructor(
+    private readonly extraArgs: () => string[] = () => [],
+    /** Liveness for the UI + routing layer: fires on every flip, so settings
+     * badges follow the local daemon instead of assuming it once at boot. */
+    private readonly onState?: (connected: boolean) => void,
+  ) {}
 
   onReady(cb: () => void): void {
     this.readyListeners.add(cb)
@@ -184,8 +192,11 @@ class LocalConnection implements DaemonConnection {
     )
   }
 
+  /** Liveness for settings badges + the routing layer: the daemon announced
+   * readiness and is still running. A child that never spoke is not connected —
+   * it cannot answer anything. */
   get connected(): boolean {
-    return this.child !== null && this.isAlive(this.child)
+    return this.ready && this.child !== null && this.isAlive(this.child)
   }
 
   private isAlive(child: ChildProcess): boolean {
@@ -202,6 +213,8 @@ class LocalConnection implements DaemonConnection {
       console.log(`[daemon] ping ok: ${JSON.stringify(pong)}`)
     } catch (err) {
       console.log(`[daemon] unavailable: ${err instanceof Error ? err.message : String(err)}`)
+      this.ready = false
+      this.onState?.(false)
     }
   }
 
@@ -257,6 +270,15 @@ class LocalConnection implements DaemonConnection {
       this.child = child
       const failTimer = setTimeout(() => {
         this.booted = null
+        // Never announced readiness: unusable. Drop the handle — daemon calls
+        // then fail fast instead of hanging on a mute child — and kill it, since
+        // a wedged child keeps its WS port and would block every later attempt.
+        // The exit handler schedules the respawn, so a slow boot recovers on its
+        // own instead of leaving the app daemon-less until the next launch.
+        console.log(`[daemon] no readiness within ${SPAWN_WAIT_MS}ms; dropping the child`)
+        this.ready = false
+        this.child = null
+        child.kill('SIGKILL')
         reject(new Error(`daemon did not announce readiness within ${SPAWN_WAIT_MS}ms`))
       }, SPAWN_WAIT_MS)
       this.booted = (err) => {
@@ -267,13 +289,17 @@ class LocalConnection implements DaemonConnection {
 
       child.on('error', (err) => {
         console.log(`[daemon] child error: ${err.message}`)
+        this.ready = false
+        this.onState?.(false)
         this.failBoot(new Error(`daemon spawn failed: ${err.message}`))
         this.scheduleRespawn()
       })
       child.on('exit', (code, signal) => {
         console.log(`[daemon] process exited (code ${code}, signal ${signal})`)
         this.failBoot(new Error('daemon exited before announcing readiness'))
+        this.ready = false
         this.child = null
+        this.onState?.(false)
         this.scheduleRespawn()
       })
       child.stderr?.on('data', (chunk: Buffer) => {
@@ -302,6 +328,8 @@ class LocalConnection implements DaemonConnection {
 
   private onHelloOk(): void {
     this.booted?.()
+    this.ready = true
+    this.onState?.(true)
     // M3 reconnect re-hydrate (goal.md §5.3): a respawn means the event
     // stream may have gaps; the only recovery is a full re-hydrate.
     if (this.everBooted) {
@@ -599,7 +627,10 @@ interface CredFile {
 }
 
 class DaemonRegistry {
-  private local = new LocalConnection(() => this.localWsArgs())
+  private local = new LocalConnection(
+    () => this.localWsArgs(),
+    (connected) => this.notifyState('local', connected),
+  )
   private remotes = new Map<string, RemoteConnection>()
   private tokens = new Map<string, string>() // id → plaintext (main-only)
   /** Local daemon WS-carrier secret; generated once, persisted, reused so

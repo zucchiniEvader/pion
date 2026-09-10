@@ -14,9 +14,16 @@ export function useUpdateCheck() {
 
   useEffect(() => {
     let cancelled = false
-    void window.pi.updates.result().then((r) => {
-      if (!cancelled) setResult(r)
-    })
+    // The local daemon owns this check: while it is down (or still starting) the
+    // call rejects. The push channel below delivers the result once the daemon is
+    // back, so a failed pull leaves the section empty rather than rejecting
+    // unhandled.
+    void window.pi.updates
+      .result()
+      .then((r) => {
+        if (!cancelled) setResult(r)
+      })
+      .catch(() => undefined)
     return () => {
       cancelled = true
     }
