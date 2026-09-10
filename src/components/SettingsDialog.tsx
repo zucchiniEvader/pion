@@ -38,6 +38,7 @@ import type {
 } from '@/types'
 import { useI18n, useUserErrorMessage } from '@/i18n'
 import { applyTheme, persistTheme, readStoredTheme } from '@/theme'
+import { AppLogo } from '@/components/AppLogo'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 
@@ -1224,50 +1225,70 @@ const AUTHOR_TWITTER_URL = 'https://x.com/zucchiniEvader'
 
 function AboutSection({ meta }: { meta: AppMeta | null }) {
   const { t } = useI18n()
+  const platform = meta?.platform === 'darwin' ? 'macOS' : meta?.platform === 'win32' ? 'Windows' : meta?.platform === 'linux' ? 'Linux' : meta?.platform ?? '—'
 
   return (
-    <div className="flex flex-col gap-4">
-      <h3 className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink2">{t('settings.nav.about')}</h3>
-      <div className="flex flex-col gap-1 rounded-lg border-[0.5px] border-line bg-panel px-2.5 py-2 text-[13px]">
-        <div className="flex items-center justify-between">
-          <span className="text-ink2">{t('settings.about.app')}</span>
-          <span className="font-medium text-ink">Pion {meta ? `v${meta.version}` : ''}</span>
+    <div data-settings-about className="@container mx-auto flex min-h-full max-w-[560px] flex-col">
+      <section className="flex flex-col items-center pb-8 pt-5 text-center">
+        <AppLogo className="size-[72px] rounded-[18px]" />
+        <h3 className="mt-4 text-[30px] font-semibold leading-tight tracking-tight text-ink">Pion</h3>
+        <p className="mt-2 text-[13px] leading-relaxed text-ink2">{t('settings.about.tagline')}</p>
+        <span className="mt-3 rounded-full border-[0.5px] border-line bg-panel px-2.5 py-1 font-mono text-[10px] leading-none text-ink2">
+          {meta ? `v${meta.version}` : '—'}
+        </span>
+      </section>
+
+      <section aria-labelledby="about-environment">
+        <h4 id="about-environment" className="mb-2.5 text-[11px] font-medium text-ink2">{t('settings.about.environment')}</h4>
+        <dl className="overflow-hidden rounded-xl border-[0.5px] border-line bg-panel text-xs">
+          <div className="flex items-center justify-between gap-4 border-b border-line px-4 py-3.5">
+            <dt className="text-ink2">{t('settings.about.platform')}</dt>
+            <dd className="font-medium text-ink">{platform}</dd>
+          </div>
+          <div className="px-4 py-3.5">
+            <div className="flex items-center justify-between gap-4">
+              <dt className="shrink-0 text-ink2">{t('settings.about.pi')}</dt>
+              <dd className={cn('text-right font-medium', meta && !meta.piPath ? 'text-bad' : 'text-ink')}>
+                {!meta ? '—' : meta.piPath ? (meta.piVersion ? `v${meta.piVersion}` : '—') : t('settings.about.piMissing')}
+              </dd>
+            </div>
+            {meta?.piPath && (
+              <dd className="mt-2 break-all font-mono text-[10px] leading-relaxed text-ink2">{meta.piPath}</dd>
+            )}
+          </div>
+        </dl>
+      </section>
+
+      <section aria-labelledby="about-links" className="mt-6">
+        <h4 id="about-links" className="mb-2.5 text-[11px] font-medium text-ink2">{t('settings.about.explore')}</h4>
+        <div className="grid grid-cols-1 gap-2 @min-[440px]:grid-cols-3">
+          {[
+            { href: PROJECT_HOME_URL, label: t('settings.about.home'), detail: t('settings.about.homeHint'), Icon: Globe },
+            { href: PROJECT_REPO_URL, label: t('settings.about.repo'), detail: t('settings.about.repoHint'), Icon: Code2 },
+            { href: AUTHOR_TWITTER_URL, label: t('settings.about.twitter'), detail: '@zucchiniEvader', Icon: AtSign },
+          ].map(({ href, label, detail, Icon }) => (
+            <button
+              key={href}
+              className="group flex min-w-0 flex-col gap-3 rounded-xl border-[0.5px] border-line p-3 text-left text-ink transition-colors hover:bg-panel focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              title={href}
+              onClick={() => void window.pi.app.openExternal(href)}
+            >
+              <span className="flex w-full items-center justify-between text-ink2">
+                <Icon size={16} strokeWidth={1.5} />
+                <ExternalLink size={11} className="opacity-50 transition-opacity group-hover:opacity-100" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-xs font-medium">{label}</span>
+                <span className="mt-1 block break-words text-[10px] leading-relaxed text-ink2">{detail}</span>
+              </span>
+            </button>
+          ))}
         </div>
-        <div className="flex items-center justify-between">
-          <span className="text-ink2">{t('settings.about.platform')}</span>
-          <span className="font-medium capitalize text-ink">{meta?.platform ?? '—'}</span>
-        </div>
-        <div className="flex items-center justify-between gap-3">
-          <span className="shrink-0 text-ink2">{t('settings.about.pi')}</span>
-          {meta?.piPath ? (
-            <span className="truncate font-mono text-[11px] text-ink" title={meta.piPath}>
-              v{meta.piVersion ?? '?'} · {meta.piPath}
-            </span>
-          ) : (
-            <span className="text-bad">{t('settings.about.piMissing')}</span>
-          )}
-        </div>
-      </div>
-      {/* Static links: they must not hinge on the release check, which needs
-          the network and returns no URL when offline. */}
-      <div className="flex flex-col gap-1.5">
-        {[
-          { href: PROJECT_HOME_URL, label: t('settings.about.home'), Icon: Globe },
-          { href: PROJECT_REPO_URL, label: t('settings.about.repo'), Icon: Code2 },
-          { href: AUTHOR_TWITTER_URL, label: t('settings.about.twitter'), Icon: AtSign },
-        ].map(({ href, label, Icon }) => (
-          <button
-            key={href}
-            className="flex h-8 items-center justify-center gap-1.5 rounded-lg border-[0.5px] border-line text-xs font-medium text-ink transition-colors hover:bg-fill-hover"
-            title={href}
-            onClick={() => void window.pi.app.openExternal(href)}
-          >
-            <Icon size={12} strokeWidth={1.75} />
-            {label}
-          </button>
-        ))}
-      </div>
-      <p className="mt-auto text-[11px] text-ink2">MIT License</p>
+      </section>
+
+      <footer className="mt-auto pt-7 text-center text-[10px] leading-relaxed text-ink2">
+        {t('settings.about.openSource')} <span className="px-1" aria-hidden="true">·</span> MIT License
+      </footer>
     </div>
   )
 }
