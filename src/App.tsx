@@ -20,12 +20,27 @@ import { useAllKanbanBoards } from '@/hooks/useAllKanbanBoards'
 import { useUpdateCheck } from '@/hooks/useUpdateCheck'
 import { useUserErrorMessage } from '@/i18n'
 
+// First-run onboarding (docs/onboarding-design.md §2): the welcome screen shows
+// once per client install. Client-local UI preference, same layer as
+// theme/language — deliberately not daemon state and not on the wire.
+const WELCOME_SEEN_KEY = 'pion.welcome.seen'
+
+function welcomeSeen(): boolean {
+  try {
+    return localStorage.getItem(WELCOME_SEEN_KEY) === '1'
+  } catch {
+    // Storage unavailable: skip the intro rather than block every launch.
+    return true
+  }
+}
+
 export default function App() {
   const ue = useUserErrorMessage()
   const [meta, setMeta] = useState<AppMeta | null>(null)
   // Boot gate: verify the PI environment before the main UI mounts; a machine
-  // without pi is held on the setup guide instead.
-  const [boot, setBoot] = useState<'loading' | 'ready' | 'setup'>('loading')
+  // without pi is held on the setup guide, and the first launch that finds pi
+  // gets the welcome screen.
+  const [boot, setBoot] = useState<'loading' | 'setup' | 'welcome' | 'ready'>('loading')
   const [projects, setProjects] = useState<ProjectRecord[]>([])
   const [sessionsByPath, setSessionsByPath] = useState<Record<string, SessionRecord[]>>({})
   // Session files this app created or opened, per project path; the sidebar
@@ -105,13 +120,25 @@ export default function App() {
     try {
       const m = await window.pi.app.getMeta()
       setMeta(m)
-      setBoot(m.piPath ? 'ready' : 'setup')
+      // Missing pi → fix the environment first; present → welcome once per
+      // client install, then straight into the UI on every later launch.
+      setBoot(m.piPath ? (welcomeSeen() ? 'ready' : 'welcome') : 'setup')
       // Projects load as part of boot; the main UI stays empty without this.
       if (m.piPath) await refreshProjects()
     } catch {
       setBoot('setup')
     }
   }, [refreshProjects])
+
+  // Welcome dismissed: remember it for this client and mount the main UI.
+  const finishWelcome = useCallback(() => {
+    try {
+      localStorage.setItem(WELCOME_SEEN_KEY, '1')
+    } catch {
+      // Storage unavailable: the intro reappears next launch — harmless.
+    }
+    setBoot('ready')
+  }, [])
 
   useEffect(() => {
     void runBootCheck()
@@ -562,7 +589,13 @@ export default function App() {
   if (boot !== 'ready') {
     return (
       <div className="grid h-full place-items-center bg-canvas text-ink">
-        <BootScreen phase={boot} problem={meta?.problem?.reason} onRecheck={() => void runBootCheck()} />
+        <BootScreen
+          phase={boot}
+          problem={meta?.problem?.reason}
+          platform={meta?.platform}
+          onRecheck={() => void runBootCheck()}
+          onStart={finishWelcome}
+        />
       </div>
     )
   }

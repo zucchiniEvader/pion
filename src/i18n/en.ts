@@ -52,9 +52,29 @@ export const en: Record<MsgKey, string> = {
   // —— BootScreen (PI detection) ——
   'boot.piMissing': 'PI not detected',
   'boot.piRequired': 'This app requires the pi CLI installed on this machine.',
-  'boot.installHint': 'For example:',
+  'boot.installScript': 'Install script',
+  'boot.installScriptNote': 'Paste it into a terminal; the script checks the Node version and installs it if needed.',
+  'boot.installNpm': 'Or with npm',
+  'boot.openSite': 'Open pi.dev',
+  'boot.autoInstall': 'Install pi',
+  'boot.installing': 'Installing…',
+  'boot.autoInstallHint': "Runs pi.dev's official installer. No terminal needed, and it does not change your shell profile.",
+  'boot.manualInstall': 'Or install manually',
+  'boot.installFailedStart': 'Could not start the install: {reason}',
+  'boot.installFailedExit': 'Install failed (exit code {code}). You can install manually with the commands below.',
   'boot.recheck': 'Check again',
   'boot.checking': 'Checking the PI environment…',
+
+  // —— WelcomeScreen (first-launch intro) ——
+  'welcome.title': 'Welcome to Pion',
+  'welcome.subtitle': 'Pion is a desktop workbench for the PI on this machine — sessions, projects and the task board in one place.',
+  'welcome.feature.sessions': 'PI sessions',
+  'welcome.feature.sessions.desc': 'Runs your local pi; history stays PI’s own session JSONL.',
+  'welcome.feature.projects': 'Projects',
+  'welcome.feature.projects.desc': 'Organize work by directory, each with its own tasks and context.',
+  'welcome.feature.kanban': 'Task board',
+  'welcome.feature.kanban.desc': 'Backlog, running and review — cards dispatch straight to PI.',
+  'welcome.start': 'Get started',
 
   // —— ImageLightbox ——
   'lightbox.imagePreview': 'Image preview',

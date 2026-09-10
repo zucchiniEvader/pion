@@ -55,9 +55,28 @@ export const zh = {
   // —— BootScreen（PI 环境检测）——
   'boot.piMissing': '未检测到 PI',
   'boot.piRequired': '本应用需要本机安装 pi 命令行工具。',
-  'boot.installHint': '例如：',
+  'boot.installScript': '一键安装脚本',  'boot.installScriptNote': '在终端里粘贴运行；脚本会检查 Node 版本，必要时一并安装。',
+  'boot.installNpm': '或者用 npm',
+  'boot.openSite': '打开 pi.dev 官网',
+  'boot.autoInstall': '一键安装 pi',
+  'boot.installing': '正在安装…',
+  'boot.autoInstallHint': '运行 pi.dev 官方安装脚本；不需要终端，也不会修改你的 shell 配置。',
+  'boot.manualInstall': '或者手动安装',
+  'boot.installFailedStart': '无法开始安装：{reason}',
+  'boot.installFailedExit': '安装失败（退出码 {code}）。可以改用下面的命令手动安装。',
   'boot.recheck': '重新检测',
   'boot.checking': '正在检查 PI 环境…',
+
+  // —— WelcomeScreen（首次打开的欢迎页）——
+  'welcome.title': '欢迎使用 Pion',
+  'welcome.subtitle': 'Pion 是本机 PI 的桌面工作台，会话、项目与任务看板都在一处。',
+  'welcome.feature.sessions': 'PI 会话',
+  'welcome.feature.sessions.desc': '直接跑本机的 pi，历史就是 PI 自己的 Session JSONL。',
+  'welcome.feature.projects': '项目',
+  'welcome.feature.projects.desc': '按目录管理项目，每个项目有自己的任务与上下文。',
+  'welcome.feature.kanban': '任务看板',
+  'welcome.feature.kanban.desc': '待办、执行、审核三段流转，卡片可直接派给 PI。',
+  'welcome.start': '开始使用',
 
   // —— ImageLightbox ——
   'lightbox.imagePreview': '图片预览',

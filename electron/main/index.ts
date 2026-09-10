@@ -30,6 +30,7 @@ import type {
 } from '../../src/types'
 import { IPC } from '../../src/types'
 import { detectPi, safeChildEnvironment } from '../../daemon/pi-rpc'
+import { runPiInstall, stopPiInstall } from './pi-install'
 import { daemons } from './daemon-client'
 import { initUpdater } from './updater'
 import type { DaemonConnection } from './daemon-client'
@@ -499,6 +500,13 @@ function registerIpc(): void {
     return info
   })
 
+  // First-run setup page: install pi by running pi.dev's official installer in
+  // the background. Explicit user action only; progress streams to the renderer
+  // (state + rationale live in pi-install.ts).
+  ipcMain.handle(IPC.APP_PI_INSTALL, async (): Promise<{ started: boolean; error?: string }> =>
+    runPiInstall((event) => sendToRenderer(IPC.APP_PI_INSTALL_PROGRESS, event)),
+  )
+
   // Read-only view of the local pi's custom providers (~/.pi/agent/models.json).
   // API keys redact to a boolean; local-only (remote runtimes need daemon
   // methods, protocol v2 — settings-design.md §3.2).
@@ -751,6 +759,7 @@ app.whenReady().then(async () => {
 // ladder as backstop. Remote connections just drop (the resident daemon on
 // the other machine owns its own processes).
 app.on('before-quit', () => {
+  stopPiInstall()
   void daemons.stopAll()
 })
 

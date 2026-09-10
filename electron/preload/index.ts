@@ -229,6 +229,8 @@ const api: PiGuiApi = {
       },
     },
     providersLocal: () => invoke<ProvidersLocalResult>(IPC.APP_PROVIDERS_LOCAL),
+    installPi: () => invoke<{ started: boolean; error?: string }>(IPC.APP_PI_INSTALL),
+    onInstallProgress: (cb) => subscribe<UpdateProgressEvent>(IPC.APP_PI_INSTALL_PROGRESS, cb),
     modelsList: () => invoke<PiAvailableModel[]>(IPC.APP_MODELS_LIST),
     setDefaultModel: (provider: string, modelId: string) =>
       invoke<void>(IPC.APP_DEFAULT_MODEL_SET, assertNonEmptyString(provider, 'provider', 100), assertNonEmptyString(modelId, 'modelId', 200)),
