@@ -72,21 +72,30 @@ interface Prewarm {
   // renderer pool; forwarding is gated on this until the runtime is adopted.
   bound: boolean
   // Wall-clock spawn time. pi snapshots settings.json (default model
-  // included) once per process at boot, so a prewarm born before a
-  // default-model change would serve the old default; see
-  // defaultModelChangedSince.
+  // included) and auth.json (credentials) once per process at boot, so a
+  // prewarm born before either change would serve the old default model or an
+  // unavailable provider; see piConfigChangedSince.
   bornAt: number
 }
 
-// True when pi's settings.json was written after `bornAt` — the prewarm's
-// in-process default model is stale and it must not be adopted.
-const PI_SETTINGS_PATH = join(homedir(), '.pi', 'agent', 'settings.json')
-async function defaultModelChangedSince(bornAt: number): Promise<boolean> {
-  try {
-    return (await stat(PI_SETTINGS_PATH)).mtimeMs > bornAt
-  } catch {
-    return false // no settings file: nothing to go stale
+// True when a file pi reads once per process was written after `bornAt` —
+// settings.json (default model) or auth.json (credentials, written by
+// settings.authSetKey / settings.authRemove): the prewarm's in-process view is
+// stale and it must not be adopted. pi has no RPC command to re-read either
+// file, so a cold spawn is the only refresh.
+const PI_CONFIG_PATHS = [
+  join(homedir(), '.pi', 'agent', 'settings.json'),
+  join(homedir(), '.pi', 'agent', 'auth.json'),
+]
+async function piConfigChangedSince(bornAt: number): Promise<boolean> {
+  for (const path of PI_CONFIG_PATHS) {
+    try {
+      if ((await stat(path)).mtimeMs > bornAt) return true
+    } catch {
+      // file not there: nothing to go stale
+    }
   }
+  return false
 }
 const prewarmed = new Map<string, Prewarm>() // runtimeId → prewarm
 const PREWARM_LIMIT = 2
@@ -314,10 +323,10 @@ async function performStart(options: AgentStartOptions): Promise<RuntimeInfo> {
   if (!options.modelId && !options.thinking && !options.extensions?.length) {
     const binding = options.sessionPath != null
     let entry = [...prewarmed.values()].find((p) => p.projectPath === options.projectPath)
-    // A prewarm carries the default model pi read at its own boot; if the
-    // user changed it since, retire the prewarm and cold-spawn so the new
-    // session actually uses the new default.
-    if (entry && (await defaultModelChangedSince(entry.bornAt))) {
+    // A prewarm carries the default model and credentials pi read at its own
+    // boot; if either changed since, retire the prewarm and cold-spawn so the
+    // new session actually uses them.
+    if (entry && (await piConfigChangedSince(entry.bornAt))) {
       void discardPrewarm(entry.runtime.runtimeId)
       entry = undefined
     }

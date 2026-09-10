@@ -20,6 +20,12 @@ export const IPC = {
   APP_GUI_LATEST: 'app:gui-latest',
   /** settings Providers: read-only view of the local pi's ~/.pi/agent/models.json. */
   APP_PROVIDERS_LOCAL: 'app:providers-local',
+  /** settings Providers: pi's stored credentials (auth.json), values redacted. */
+  APP_AUTH_STATE: 'app:auth-state',
+  /** settings Providers: stores an API key in pi's auth.json. */
+  APP_AUTH_SET_KEY: 'app:auth-set-key',
+  /** settings Providers: removes a stored API key from pi's auth.json. */
+  APP_AUTH_REMOVE: 'app:auth-remove',
   /** settings Providers: full model catalog (pi --list-models, client-local). */
   APP_MODELS_LIST: 'app:models-list',
   /** settings Providers: writes defaultProvider/defaultModel into pi's settings.json. */
@@ -166,6 +172,33 @@ export interface ProvidersLocalResult {
   defaultProvider: string | null
   defaultModel: string | null
   providers: ProviderSummary[]
+}
+
+/** One provider the GUI can store an API key for: pi's built-in API-key
+ * providers plus the user's models.json providers (custom). */
+export interface AuthProviderCandidate {
+  id: string
+  name: string
+  /** pi's environment variable for a built-in provider (the alternative to
+   * storing a key: export it before launching pi). */
+  env?: string
+  /** Declared in the user's models.json rather than pi's built-in catalog. */
+  custom?: boolean
+}
+
+/** One credential in pi's ~/.pi/agent/auth.json. Never carries a value. */
+export interface ConfiguredAuthProvider {
+  id: string
+  name: string
+  kind: 'api_key' | 'oauth'
+  /** api_key entries can be replaced/removed here; oauth entries are pi's own
+   * `/login` (`refresh`/rotation semantics live there) and stay read-only. */
+  removable: boolean
+}
+
+export interface AuthStateResult {
+  configured: ConfiguredAuthProvider[]
+  candidates: AuthProviderCandidate[]
 }
 
 export interface ProjectRecord {
@@ -619,6 +652,13 @@ export interface PiGuiApi {
     }
     /** Read-only view of the local pi's custom providers (models.json). */
     providersLocal: () => Promise<ProvidersLocalResult>
+    /** Credentials stored in pi's auth.json (ids + kinds only, never values).
+     * Written by the daemon on the machine pi runs on. */
+    authState: () => Promise<AuthStateResult>
+    /** Stores an API key for a provider; returns the fresh state. */
+    authSetKey: (provider: string, key: string) => Promise<AuthStateResult>
+    /** Removes a stored API-key credential; returns the fresh state. */
+    authRemove: (provider: string) => Promise<AuthStateResult>
     /** Runs pi.dev's official installer (first-run setup page). Explicit user
      * action only; returns { started: false, error } when it could not start. */
     installPi: () => Promise<{ started: boolean; error?: string }>

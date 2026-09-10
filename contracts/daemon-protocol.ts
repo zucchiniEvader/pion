@@ -7,6 +7,7 @@
 
 import type {
   AgentStartOptions,
+  AuthStateResult,
   GitOverview,
   KanbanAssignInput,
   KanbanBoard,
@@ -42,6 +43,8 @@ export const DAEMON_PROTOCOL_VERSION = 3
 // 不重置);'conflict' 语义改为「runtime busy / 客户端数上限」,不再表示第二控制端;
 // agent.command 对 streaming runtime 的 prompt 返回 conflict(busy);
 // daemon.shutdown 仅限 owner 载体(stdio / dial-home),监听载体返回 unauthorized。
+// v3 期间新增的 additive 方法(daemon.info、settings.auth*)不升版本号:老客户端
+// 从不调用它们,新客户端对老 daemon 得到 not_found,没有静默降级。
 
 // ──────────────────────────────────────────────────────────────────────────
 // Error envelope (decision §5.8: same success/error semantics as today's
@@ -216,6 +219,16 @@ export interface DaemonMethodMap {
       listeners: Array<{ kind: 'ws' | 'tcp'; host: string; port: number }>
     }
   }
+
+  /** v3 additive, same shape as `daemon.info`: old clients never call these,
+   * a new client on an older daemon gets `not_found` (loud, not silent).
+   * settings Providers: the local pi's credentials. Reads and writes
+   * `~/.pi/agent/auth.json`; a remote runtime's keys are written by ITS daemon
+   * through these same methods. Values never leave the daemon — results carry
+   * provider ids and credential kinds only. */
+  'settings.authState': { params: Record<string, never>; result: AuthStateResult }
+  'settings.authSetKey': { params: { provider: string; key: string }; result: AuthStateResult }
+  'settings.authRemove': { params: { provider: string }; result: AuthStateResult }
 
   // sessions
   'sessions.list': { params: { projectPath: string; force?: boolean }; result: SessionRecord[] }

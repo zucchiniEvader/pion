@@ -33,6 +33,7 @@ import type {
   ThemeSetting,
   GuiUpdateInfo,
   ProvidersLocalResult,
+  AuthStateResult,
   PiAvailableModel,
 } from '../../src/types'
 import { IPC } from '../../src/types'
@@ -230,6 +231,10 @@ const api: PiGuiApi = {
       },
     },
     providersLocal: () => invoke<ProvidersLocalResult>(IPC.APP_PROVIDERS_LOCAL),
+    authState: () => invoke<AuthStateResult>(IPC.APP_AUTH_STATE),
+    authSetKey: (provider, key) =>
+      invoke<AuthStateResult>(IPC.APP_AUTH_SET_KEY, assertNonEmptyString(provider, 'provider', 100), assertNonEmptyString(key, 'key', 4096)),
+    authRemove: (provider) => invoke<AuthStateResult>(IPC.APP_AUTH_REMOVE, assertNonEmptyString(provider, 'provider', 100)),
     installPi: () => invoke<{ started: boolean; error?: string }>(IPC.APP_PI_INSTALL),
     onInstallProgress: (cb) => subscribe<UpdateProgressEvent>(IPC.APP_PI_INSTALL_PROGRESS, cb),
     modelsList: () => invoke<PiAvailableModel[]>(IPC.APP_MODELS_LIST),

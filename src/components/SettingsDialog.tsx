@@ -15,6 +15,7 @@ import {
   KeyRound,
   LoaderCircle,
   Plug,
+  Plus,
   QrCode,
   RefreshCw,
   Server,
@@ -26,6 +27,9 @@ import { encode } from 'uqr'
 import type {
   AppMeta,
   AppUpdateStatus,
+  AuthProviderCandidate,
+  AuthStateResult,
+  ConfiguredAuthProvider,
   GuiUpdateInfo,
   PiAvailableModel,
   ProvidersLocalResult,
@@ -36,6 +40,7 @@ import type {
   UpdateCheckResult,
   UpdateProgressEvent,
 } from '@/types'
+import { Badge } from '@/components/ui/badge'
 import { useI18n, useUserErrorMessage } from '@/i18n'
 import { applyTheme, persistTheme, readStoredTheme } from '@/theme'
 import { AppLogo } from '@/components/AppLogo'
@@ -211,16 +216,22 @@ function GeneralSection() {
   )
 }
 
-// ── Providers: read-only view of the local pi's models.json ───────────────
+// ── Providers: pi's credential store (auth.json) + the models.json view ───
 
 function ProvidersSection({ onDefaultModelChanged }: { onDefaultModelChanged: (provider: string, modelId: string) => void }) {
   const { t } = useI18n()
   const ue = useUserErrorMessage()
   const [data, setData] = useState<ProvidersLocalResult | null>(null)
+  const [auth, setAuth] = useState<AuthStateResult | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [authError, setAuthError] = useState<string | null>(null)
+  const [adding, setAdding] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null)
 
   useEffect(() => {
     void window.pi.app.providersLocal().then(setData).catch((e) => setError(ue(e)))
+    void window.pi.app.authState().then(setAuth).catch((e) => setAuthError(ue(e)))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -228,6 +239,25 @@ function ProvidersSection({ onDefaultModelChanged }: { onDefaultModelChanged: (p
     await window.pi.app.setDefaultModel(m.provider, m.id)
     onDefaultModelChanged(m.provider, m.id)
     setData(await window.pi.app.providersLocal())
+  }
+
+  // Two-step remove, like the runtimes list.
+  const remove = async (id: string): Promise<void> => {
+    if (busy) return
+    if (confirmRemoveId !== id) {
+      setConfirmRemoveId(id)
+      return
+    }
+    setConfirmRemoveId(null)
+    setBusy(true)
+    setAuthError(null)
+    try {
+      setAuth(await window.pi.app.authRemove(id))
+    } catch (e) {
+      setAuthError(ue(e))
+    } finally {
+      setBusy(false)
+    }
   }
 
   if (error) return <p className="break-all text-xs text-bad">{error}</p>
@@ -270,7 +300,86 @@ function ProvidersSection({ onDefaultModelChanged }: { onDefaultModelChanged: (p
         />
       </div>
 
-      <p className="text-[11px] text-ink2">{t('settings.providers.localOnly')}</p>
+      {/* Credentials: pi's own store, written by the daemon on this machine. */}
+      <div className="rounded-lg border-[0.5px] border-line bg-panel">
+        <div className="flex items-center justify-between px-3 py-2.5">
+          <span className="flex items-center gap-1.5 text-[13px] font-medium text-ink">
+            <KeyRound size={13} strokeWidth={1.75} className="text-ink2" />
+            {t('settings.providers.credentials')}
+          </span>
+          {!adding && auth && (
+            <button
+              className="flex h-7 items-center gap-1.5 rounded-lg border-[0.5px] border-line px-2.5 text-[11px] font-medium text-ink transition-colors hover:bg-fill-hover"
+              onClick={() => setAdding(true)}
+            >
+              <Plus size={12} strokeWidth={2} />
+              {t('settings.providers.addKey')}
+            </button>
+          )}
+        </div>
+
+        {adding && auth && (
+          <AddApiKeyForm
+            candidates={auth.candidates}
+            configured={auth.configured}
+            onSaved={(state) => {
+              setAuth(state)
+              setAdding(false)
+            }}
+            onCancel={() => setAdding(false)}
+          />
+        )}
+
+        {!auth && !authError && (
+          <p className="flex items-center gap-2 px-3 pb-3 text-xs text-ink2">
+            <LoaderCircle size={13} className="animate-spin" />
+          </p>
+        )}
+
+        {auth && auth.configured.length === 0 && (
+          <p className="px-3 pb-3 text-[11px] text-ink2">{t('settings.providers.noCredentials')}</p>
+        )}
+
+        {auth && auth.configured.length > 0 && (
+          <ul className="flex flex-col gap-1 px-2 pb-2">
+            {auth.configured.map((c) => (
+              <li key={c.id} className="flex items-center gap-2.5 rounded-lg px-1.5 py-1.5 hover:bg-fill-hover">
+                <span className="shrink-0 text-[13px] font-medium text-ink">{c.name}</span>
+                <span className="shrink-0 font-mono text-[11px] text-ink2">{c.id}</span>
+                {c.kind === 'api_key' ? (
+                  <Badge tone="ok" className="h-[20px] px-1.5 text-[10px]">
+                    {t('settings.providers.keyOk')}
+                  </Badge>
+                ) : (
+                  <Badge tone="purple" className="h-[20px] px-1.5 text-[10px]" title={t('settings.providers.oauthHint')}>
+                    {t('settings.providers.oauthBadge')}
+                  </Badge>
+                )}
+                {c.removable && (
+                  <button
+                    className={cn(
+                      'ml-auto grid size-6 shrink-0 place-items-center rounded-md transition-colors',
+                      confirmRemoveId === c.id ? 'bg-tint-bad text-bad' : 'text-ink2 hover:bg-fill-hover hover:text-ink',
+                    )}
+                    title={confirmRemoveId === c.id ? t('settings.removeConfirm') : t('settings.remove')}
+                    disabled={busy}
+                    onClick={() => void remove(c.id)}
+                  >
+                    <Trash2 size={13} strokeWidth={1.75} />
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <p className="px-3 pb-2.5 text-[11px] text-ink2">{t('settings.providers.credentialsHint')}</p>
+        {authError && <p className="px-3 pb-3 break-all text-xs text-bad">{authError}</p>}
+      </div>
+
+      <div className="px-1 text-[11px] font-semibold uppercase tracking-[0.06em] text-ink2">{t('settings.providers.custom')}</div>
+
+      <p className="-mt-2 px-1 text-[11px] text-ink2">{t('settings.providers.localOnly')}</p>
 
       {data.providers.length === 0 ? (
         <div className="rounded-lg border-[0.5px] border-dashed border-line px-3 py-6 text-center text-xs text-ink2">{t('settings.providers.empty')}</div>
@@ -297,6 +406,125 @@ function ProvidersSection({ onDefaultModelChanged }: { onDefaultModelChanged: (p
           ))}
         </ul>
       )}
+    </div>
+  )
+}
+
+// Stores an API key in pi's auth.json: pick a provider (search over pi's
+// built-in API-key providers + the user's models.json providers), then the
+// key. The value goes daemon-side and is never read back.
+function AddApiKeyForm({
+  candidates,
+  configured,
+  onSaved,
+  onCancel,
+}: {
+  candidates: AuthProviderCandidate[]
+  configured: ConfiguredAuthProvider[]
+  onSaved: (state: AuthStateResult) => void
+  onCancel: () => void
+}) {
+  const { t } = useI18n()
+  const ue = useUserErrorMessage()
+  const [provider, setProvider] = useState<AuthProviderCandidate | null>(null)
+  const [query, setQuery] = useState('')
+  const [key, setKey] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const configuredIds = new Set(configured.filter((c) => c.kind === 'api_key').map((c) => c.id))
+
+  const q = query.trim().toLowerCase()
+  const matches = candidates.filter((c) => !q || c.id.toLowerCase().includes(q) || c.name.toLowerCase().includes(q)).slice(0, 40)
+
+  const save = async (): Promise<void> => {
+    if (!provider || busy) return
+    setBusy(true)
+    setError(null)
+    try {
+      onSaved(await window.pi.app.authSetKey(provider.id, key))
+    } catch (e) {
+      setError(ue(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="mx-2 mb-2 flex flex-col gap-2 rounded-lg border-[0.5px] border-line bg-canvas p-2.5">
+      {provider ? (
+        <div className="flex items-center gap-2">
+          <span className="text-[12px] font-medium text-ink">{provider.name}</span>
+          <span className="font-mono text-[11px] text-ink2">{provider.id}</span>
+          <button
+            className="ml-auto text-[11px] text-accent hover:underline"
+            onClick={() => {
+              setProvider(null)
+              setError(null)
+            }}
+          >
+            {t('settings.providers.changeProvider')}
+          </button>
+        </div>
+      ) : (
+        <>
+          <Input
+            autoFocus
+            value={query}
+            onValueChange={setQuery}
+            placeholder={t('settings.providers.pickProvider')}
+          />
+          <div className="max-h-48 overflow-y-auto">
+            {matches.map((c) => (
+              <button
+                key={c.id}
+                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-fill-hover"
+                onClick={() => setProvider(c)}
+              >
+                <span className="text-xs font-medium text-ink">{c.name}</span>
+                <span className="font-mono text-[11px] text-ink2">{c.id}</span>
+                <span className="ml-auto flex shrink-0 items-center gap-2 font-mono text-[10px] text-ink2">
+                  {c.env && <span>{c.env}</span>}
+                  {c.custom && <span>{t('settings.providers.customBadge')}</span>}
+                  {configuredIds.has(c.id) && <span className="text-ok">{t('settings.providers.keyOk')}</span>}
+                </span>
+              </button>
+            ))}
+            {matches.length === 0 && <p className="px-2 py-3 text-center text-xs text-ink2">{t('settings.providers.noMatch')}</p>}
+          </div>
+        </>
+      )}
+
+      {provider && (
+        <Input
+          type="password"
+          autoFocus
+          value={key}
+          onValueChange={setKey}
+          placeholder={t('settings.providers.apiKey')}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') void save()
+          }}
+        />
+      )}
+      {provider?.env && <p className="text-[10px] text-ink2">{t('settings.providers.envHint', { env: provider.env })}</p>}
+      {error && <p className="break-all text-[11px] text-bad">{error}</p>}
+
+      <div className="flex justify-end gap-1.5">
+        <button
+          className="flex h-7 items-center rounded-lg border-[0.5px] border-line px-2.5 text-[11px] font-medium text-ink transition-colors hover:bg-fill-hover"
+          onClick={onCancel}
+        >
+          {t('common.cancel')}
+        </button>
+        <button
+          className="flex h-7 items-center gap-1.5 rounded-lg bg-accent px-2.5 text-[11px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+          disabled={!provider || !key.trim() || busy}
+          onClick={() => void save()}
+        >
+          {busy && <LoaderCircle size={12} className="animate-spin" />}
+          {t('settings.save')}
+        </button>
+      </div>
     </div>
   )
 }

@@ -26,6 +26,7 @@ import type {
   ThemeSetting,
   GuiUpdateInfo,
   ProvidersLocalResult,
+  AuthStateResult,
   PiAvailableModel,
 } from '../../src/types'
 import { IPC } from '../../src/types'
@@ -540,6 +541,30 @@ function registerIpc(): void {
       // no models.json: empty list, path still shown for create-in-editor
     }
     return result
+  })
+
+  // Credentials in the local pi's auth.json. Client-local like the rest of the
+  // Providers section, but written by the daemon (goal.md §4: pi's config is
+  // the daemon's to write, main's only writer role is backwards). Values
+  // never reach the renderer — the state result is ids + kinds.
+  const localSettingsConnection = (): DaemonConnection => {
+    const conn = daemons.localConnection
+    if (!conn) throw new Error('The local daemon is not connected.')
+    return conn
+  }
+  ipcMain.handle(IPC.APP_AUTH_STATE, async (): Promise<AuthStateResult> => localSettingsConnection().call('settings.authState'))
+  ipcMain.handle(IPC.APP_AUTH_SET_KEY, async (_e, provider: unknown, key: unknown): Promise<AuthStateResult> => {
+    if (typeof provider !== 'string' || !provider || provider.length > 100) throw new TypeError('provider must be a non-empty string (<=100 chars)')
+    if (typeof key !== 'string' || !key.trim() || key.length > 4096) throw new TypeError('key must be a non-empty string (<=4096 chars)')
+    const state = await localSettingsConnection().call('settings.authSetKey', { provider, key })
+    modelsCatalogCache = null // the model list just changed; re-probe on next use
+    return state
+  })
+  ipcMain.handle(IPC.APP_AUTH_REMOVE, async (_e, provider: unknown): Promise<AuthStateResult> => {
+    if (typeof provider !== 'string' || !provider || provider.length > 100) throw new TypeError('provider must be a non-empty string (<=100 chars)')
+    const state = await localSettingsConnection().call('settings.authRemove', { provider })
+    modelsCatalogCache = null
+    return state
   })
 
   // Model catalog for the settings default-model picker: `pi --list-models`
