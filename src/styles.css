@@ -215,9 +215,11 @@ textarea:focus-visible {
 .drag { -webkit-app-region: drag; }
 .no-drag, button, input, textarea, select, a { -webkit-app-region: no-drag; }
 
-/* Room for macOS inset traffic lights inside draggable toolbars. */
-html.mac .traffic-inset { padding-left: 80px; }
-html.mac .traffic-inset-tight { padding-left: 68px; }
+/* Room for macOS inset traffic lights inside draggable toolbars. The
+   Tahoe-size lights (16px, macOS 26+) end at ~74px, so both variants
+   reserve 88px to leave breathing room before the first toolbar button. */
+html.mac .traffic-inset { padding-left: 88px; }
+html.mac .traffic-inset-tight { padding-left: 88px; }
 
 /* Keycap chip for keyboard-shortcut hints (sidebar ⌘N). */
 .kbd {
