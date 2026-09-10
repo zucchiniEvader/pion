@@ -32,13 +32,16 @@ const deepFreeze = (v) => {
 const cmd = (name, source, sourceInfo) => ({ name, source, sourceInfo })
 const MCP_SOURCE = { source: 'npm:pi-mcp-adapter', origin: 'package', baseDir: '/home/u/.pi/agent/npm/node_modules/pi-mcp-adapter', path: 'node_modules/pi-mcp-adapter/index.ts' }
 const PLAN_SOURCE = { source: 'npm:@narumitw/pi-plan-mode', origin: 'package', baseDir: '/home/u/.pi/agent/npm/node_modules/@narumitw/pi-plan-mode', path: 'pi-plan-mode/dist/index.ts' }
-const POINYTAIL_SOURCE = { source: 'npm:@dietrichgebert/ponytail', origin: 'package', baseDir: '/home/u/.pi/agent/npm/node_modules/@dietrichgebert/ponytail' }
+const PONYTAIL_SOURCE = { source: 'npm:@dietrichgebert/ponytail', origin: 'package', baseDir: '/home/u/.pi/agent/npm/node_modules/@dietrichgebert/ponytail', path: 'ponytail/pi-extension/index.js' }
+const UNADAPTED_SOURCE = { source: 'npm:pi-intercom', origin: 'package', baseDir: '/home/u/.pi/agent/npm/node_modules/pi-intercom' }
 
 const installed = deepFreeze([
   cmd('mcp', 'extension', MCP_SOURCE),
   cmd('pi-mcp', 'extension', MCP_SOURCE),
   cmd('plan', 'extension', PLAN_SOURCE),
-  cmd('ponytail', 'extension', POINYTAIL_SOURCE),
+  cmd('ponytail', 'extension', PONYTAIL_SOURCE),
+  cmd('ponytail-review', 'extension', PONYTAIL_SOURCE),
+  cmd('intercom', 'extension', UNADAPTED_SOURCE),
   cmd('council', 'prompt', PLAN_SOURCE),
   { name: 'session-name', source: 'extension' }, // extension with no sourceInfo
 ])
@@ -47,7 +50,7 @@ const run = (draft, commands = installed) => argumentCompletions({ commands, dra
 const values = (result) => (result ? result.items.map((i) => i.value) : null)
 
 console.log('adapter table')
-assert(PLUGIN_ADAPTERS.length === 2, 'two adapters ship today (plan-mode, mcp)')
+assert(PLUGIN_ADAPTERS.length === 3, 'three adapters ship today (plan-mode, mcp, ponytail)')
 assert(new Set(PLUGIN_ADAPTERS.map((a) => a.id)).size === PLUGIN_ADAPTERS.length, 'adapter ids are unique')
 for (const adapter of PLUGIN_ADAPTERS) {
   for (const [path, items] of Object.entries(adapter.completions)) {
@@ -79,6 +82,14 @@ assert(eq(values(run('/mcp token r')), ['remove']), 'second level filters too')
 assert(run('/mcp token set ') === null, 'the undeclared server-name level stays quiet instead of guessing')
 assert(run('/plan start x') === null, 'plan has no second level')
 
+console.log('\nponytail (parser-derived table)')
+assert(eq(values(run('/ponytail ')), ['off', 'lite', 'full', 'ultra', 'status', 'default']), '/ponytail lists the runtime levels plus status and default')
+assert(eq(values(run('/ponytail de')), ['default']), 'prefix filtering on the mode list')
+assert(eq(values(run('/ponytail default ')), ['off', 'lite', 'full', 'ultra']), '/ponytail default opens the mode list')
+assert(run('/ponytail default re') === null, 'review is a config-only value: the parser rejects it, so it is never offered')
+assert(run('/ponytail review') === null, 'the same limit applies at the first level')
+assert(run('/ponytail-review ') === null, 'the ponytail-* alias commands forward to skills without arguments — nothing to complete')
+
 console.log('\ndraft shapes')
 assert(run('/mcp') === null, 'command-name phase belongs to the command popup, not here')
 assert(run('hello world') === null, 'ordinary prose is not a draft')
@@ -89,10 +100,12 @@ assert(run('/mcp TOKEN ') === null || run('/mcp token ').items.length === 3, 'th
 assert(run('/mcp ').completed.length === 0 && run('/mcp token ').completed.join(' ') === 'token', 'completed arguments are reported back for draft rebuild')
 
 console.log('\ninstall gate')
-assert(run('/ponytail ') === null, 'a plugin without an adapter gets no completion')
+assert(run('/intercom ') === null, 'an installed plugin with no adapter gets no completion')
 assert(run('/council ') === null, 'a prompt template from an adapted plugin is not an extension command')
 const withoutMcp = deepFreeze(installed.filter((c) => c.name !== 'mcp' && c.name !== 'pi-mcp'))
 assert(argumentCompletions({ commands: withoutMcp, draft: '/mcp ' }) === null, 'adapter is inert when the plugin is not installed')
+const withoutPonytail = deepFreeze(installed.filter((c) => c.name !== 'ponytail'))
+assert(argumentCompletions({ commands: withoutPonytail, draft: '/ponytail ' }) === null, 'the ponytail adapter is inert too when the plugin is absent')
 const otherSource = deepFreeze([cmd('mcp', 'extension', { source: 'npm:some-fork-of-mcp' })])
 assert(argumentCompletions({ commands: otherSource, draft: '/mcp ' }) === null, 'a different plugin claiming the name does not trigger our table')
 assert(argumentCompletions({ commands: deepFreeze([{ name: 'mcp', source: 'extension' }]), draft: '/mcp ' }) === null, 'no sourceInfo → no match')

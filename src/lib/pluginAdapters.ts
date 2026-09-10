@@ -75,6 +75,18 @@ const PLAN_ARGUMENTS: Array<string | PluginArgumentCompletion> = [
   { value: 'tools', description: 'Choose tools before starting this Plan workflow' },
 ]
 
+/** ponytail has no completion function of its own, so this mirrors its command
+ * parser (`parsePonytailCommand`) plus the intensity table it documents. Only
+ * the runtime levels qualify: `review` is a valid *config* value but the parser
+ * rejects it, and the `ponytail-*` alias commands forward to skills with no
+ * arguments, so they need no tree. */
+const PONYTAIL_MODES: Array<string | PluginArgumentCompletion> = [
+  { value: 'off', description: 'Turn Ponytail off for this session' },
+  { value: 'lite', description: "Build what's asked, but name the lazier alternative in one line" },
+  { value: 'full', description: 'The ladder enforced: stdlib and native first, shortest diff' },
+  { value: 'ultra', description: 'YAGNI extremist: deletion before addition, challenge the rest' },
+]
+
 export const PLUGIN_ADAPTERS: readonly PluginAdapter[] = [
   {
     id: 'npm:@narumitw/pi-plan-mode',
@@ -91,6 +103,20 @@ export const PLUGIN_ADAPTERS: readonly PluginAdapter[] = [
     completions: {
       '': MCP_ARGUMENTS,
       token: ['set', 'remove', 'status'],
+    },
+  },
+  {
+    id: 'npm:@dietrichgebert/ponytail',
+    aliases: ['ponytail'],
+    name: 'Ponytail',
+    commands: ['ponytail'],
+    completions: {
+      '': [
+        ...PONYTAIL_MODES,
+        { value: 'status', description: 'Show the current and default mode' },
+        { value: 'default', description: 'Persist a default mode for new sessions' },
+      ],
+      default: PONYTAIL_MODES,
     },
   },
 ]
