@@ -77,6 +77,12 @@ export const IPC = {
   APP_UPDATE_INSTALL: 'app:update-install',
   /** main→renderer push: state machine transitions. */
   APP_UPDATE_STATUS: 'app:update-status',
+  // pi bootstrap (first-run setup page): runs pi.dev's official installer in
+  // main — client-local, so it works while the daemon is down and while pi —
+  // the thing the daemon runs — is missing.
+  APP_PI_INSTALL: 'app:pi-install',
+  /** main→renderer push: installer stdout/stderr + lifecycle. */
+  APP_PI_INSTALL_PROGRESS: 'app:pi-install-progress',
   // settings (④ runtimes: local + remote daemon connections)
   SETTINGS_LIST: 'settings:list',
   SETTINGS_ADD_REMOTE: 'settings:add-remote',
@@ -308,6 +314,9 @@ export interface RuntimeInfo {
   isCompacting?: boolean
   thinkingLevel?: string
   model?: PiModelInfo | null
+  /** Started with --no-extensions because one of pi's extensions failed to
+   * load; the rest of the user's extensions are unavailable in this runtime. */
+  extensionsDisabled?: boolean
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -597,6 +606,11 @@ export interface PiGuiApi {
     }
     /** Read-only view of the local pi's custom providers (models.json). */
     providersLocal: () => Promise<ProvidersLocalResult>
+    /** Runs pi.dev's official installer (first-run setup page). Explicit user
+     * action only; returns { started: false, error } when it could not start. */
+    installPi: () => Promise<{ started: boolean; error?: string }>
+    /** Subscribes to installer progress; returns an unsubscribe function. */
+    onInstallProgress: (cb: (e: UpdateProgressEvent) => void) => () => void
     /** Full model catalog from `pi --list-models` (cached in main). */
     modelsList: () => Promise<PiAvailableModel[]>
     /** Persists defaultProvider/defaultModel into pi's settings.json. */

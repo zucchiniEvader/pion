@@ -12,7 +12,7 @@ import { watch, existsSync, type FSWatcher } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { AgentStartOptions, PiEventEnvelope, RpcCommand, RuntimeInfo } from '../src/types'
-import { PiRpcRuntime, detectPi, invalidatePiDetection } from './pi-rpc'
+import { PiRpcRuntime, detectPi, invalidatePiDetection, isExtensionLoadFailure } from './pi-rpc'
 import { piSessionRoot, sessionBucket, trackSession } from './sessions'
 import { DaemonRpcError, type DaemonServer } from './server'
 
@@ -155,14 +155,14 @@ export async function ensurePrewarm(projectPath: string): Promise<void> {
       bound: false,
       bornAt: Date.now(),
     }
-    entry.runtime = new PiRpcRuntime(detected.path, projectPath, buildStartArgs({ projectPath }), {
+    const spawned = await spawnRuntime(detected.path, { projectPath }, {
       onEvent: (envelope) => {
         if (entry.bound) forwardRuntimeEvent(envelope)
       },
       onExit: handleRuntimeExit,
     })
-    const info = await entry.runtime.handshake()
-    entry.scratchFile = info.sessionFile ?? null
+    entry.runtime = spawned.runtime
+    entry.scratchFile = spawned.info.sessionFile ?? null
     prewarmed.set(entry.runtime.runtimeId, entry)
   } catch {
     /* pi missing or broken: session opens fall back to the cold path */
@@ -171,8 +171,13 @@ export async function ensurePrewarm(projectPath: string): Promise<void> {
   }
 }
 
-function buildStartArgs(options: AgentStartOptions): string[] {
+function buildStartArgs(options: AgentStartOptions, noExtensions = false): string[] {
   const args = ['--mode', 'rpc']
+  // Retry mode (spawnRuntime below): turn off extension DISCOVERY — whatever the
+  // user installed globally — while the explicit -e flags at the bottom keep
+  // loading. A broken or version-incompatible global extension is fatal to pi,
+  // and Pion neither controls nor needs those.
+  if (noExtensions) args.push('--no-extensions')
   // pi has no --cwd flag; the session bucket derives from the child process
   // working directory, which the runtime sets to the project path.
   if (options.sessionPath) args.push('--session', options.sessionPath)
@@ -188,6 +193,66 @@ function buildStartArgs(options: AgentStartOptions): string[] {
   // these — the AGENT_START trust boundary in Electron main strips the field.
   for (const ext of options.extensions ?? []) args.push('-e', ext)
   return args
+}
+
+interface SpawnCallbacks {
+  onEvent: (envelope: PiEventEnvelope) => void
+  onExit: (runtime: PiRpcRuntime) => void
+}
+
+/**
+ * Creates a runtime and completes its handshake, retrying once with extension
+ * discovery disabled when pi died loading an extension.
+ *
+ * Why retry: pi treats a failed extension as fatal — it exits before answering,
+ * so without this every session on that machine dies as "PI RPC exited (1)"
+ * (measured: pi 0.74.2 plus an extension declaring >= 0.84.0). Discovery covers
+ * whatever the user has installed globally, which Pion can neither fix nor rely on.
+ *
+ * The first attempt's events are buffered rather than forwarded: a probe that is
+ * about to be replaced must leave no trace, or the renderer materialises a
+ * phantom crashed session for a runtime it never knew (useSessionPool keys an
+ * unknown runtimeId through defaultSessionState). They are released only once the
+ * handshake proves this runtime is the keeper — which also preserves the status
+ * events pi emits during startup (e.g. an extension's setStatus).
+ */
+async function spawnRuntime(
+  executable: string,
+  options: AgentStartOptions,
+  callbacks: SpawnCallbacks,
+): Promise<{ runtime: PiRpcRuntime; info: RuntimeInfo }> {
+  const attempt = (noExtensions: boolean) => {
+    let passthrough = false
+    const buffered: PiEventEnvelope[] = []
+    const runtime = new PiRpcRuntime(executable, options.projectPath, buildStartArgs(options, noExtensions), {
+      onEvent: (envelope) => (passthrough ? callbacks.onEvent(envelope) : buffered.push(envelope)),
+      onExit: (exited) => {
+        if (passthrough) callbacks.onExit(exited)
+      },
+    })
+    return {
+      runtime,
+      async settle(): Promise<{ runtime: PiRpcRuntime; info: RuntimeInfo }> {
+        const info = await runtime.handshake()
+        passthrough = true
+        for (const envelope of buffered) callbacks.onEvent(envelope)
+        buffered.length = 0
+        return { runtime, info }
+      },
+    }
+  }
+
+  const first = attempt(false)
+  try {
+    return await first.settle()
+  } catch (error) {
+    // Never leave a half-alive child behind (the handshake may have timed out
+    // rather than the child having exited).
+    void first.runtime.stop()
+    if (!isExtensionLoadFailure(error)) throw error
+    console.log('[daemon] pi failed to load an extension; retrying with --no-extensions')
+    return await attempt(true).settle()
+  }
 }
 
 export async function startRuntime(options: AgentStartOptions): Promise<RuntimeInfo> {
@@ -291,25 +356,21 @@ async function performStart(options: AgentStartOptions): Promise<RuntimeInfo> {
       if (binding && entry.scratchFile) void rm(entry.scratchFile, { force: true }).catch(() => undefined)
     }
   }
-  const args = buildStartArgs(options)
-  const runtime = new PiRpcRuntime(detected.path, options.projectPath, args, {
-    onEvent: forwardRuntimeEvent,
-    onExit: handleRuntimeExit,
-  })
-  runtimes.set(runtime.runtimeId, runtime)
-  runtimeLastUsedAt.set(runtime.runtimeId, Date.now())
-  // handshake performs get_state; throws if pi is broken. A failed handshake
-  // must not leave a half-alive child in the pool.
-  let info: RuntimeInfo
+  // Cold spawn: the prewarm could not serve this request (no prewarm, a changed
+  // default model, or a dispatch carrying extensions).
+  let spawned: { runtime: PiRpcRuntime; info: RuntimeInfo }
   try {
-    info = await runtime.handshake()
+    spawned = await spawnRuntime(detected.path, options, {
+      onEvent: forwardRuntimeEvent,
+      onExit: handleRuntimeExit,
+    })
   } catch (e) {
     invalidatePiDetection()
-    runtimes.delete(runtime.runtimeId)
-    runtimeLastUsedAt.delete(runtime.runtimeId)
-    void runtime.stop()
     throw e
   }
+  const { runtime, info } = spawned
+  runtimes.set(runtime.runtimeId, runtime)
+  runtimeLastUsedAt.set(runtime.runtimeId, Date.now())
   if (info.sessionFile) {
     sessionRuntimeByFile.set(info.sessionFile, runtime.runtimeId)
     onSessionRestarted(info.sessionFile)

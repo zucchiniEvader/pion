@@ -102,12 +102,30 @@ class StrictJsonlDecoder {
 // Probe the conventional tool dirs once and prepend the existing ones.
 let guiPathPrefix: string | null | undefined
 
+/**
+ * nvm's version directories, newest node first. A plain `sort()` is
+ * lexicographic, so it ranks "v9.11.0" ABOVE "v22.23.1" — which would put an
+ * ancient node first on PATH and make every `pi` spawn (shebang
+ * `#!/usr/bin/env node`) run under it. Compare the numbers instead.
+ */
+export function nvmVersionDirsNewestFirst(names: string[]): string[] {
+  const parts = (name: string): number[] => name.replace(/^v/, '').split('.').map((n) => Number(n) || 0)
+  return [...names].sort((a, b) => {
+    const x = parts(a)
+    const y = parts(b)
+    for (let i = 0; i < 3; i++) {
+      if ((x[i] ?? 0) !== (y[i] ?? 0)) return (y[i] ?? 0) - (x[i] ?? 0)
+    }
+    return 0
+  })
+}
+
 function guiPathPrefixDirs(): string[] {
   const home = homedir()
   const dirs = ['/usr/local/bin', '/opt/homebrew/bin', '/opt/homebrew/sbin', '/usr/local/sbin', join(home, '.local', 'bin'), join(home, '.npm-global', 'bin'), join(home, '.bun', 'bin'), join(home, '.volta', 'bin')]
   try {
     // Newest nvm node first; all installed versions stay resolvable.
-    for (const version of readdirSync(join(home, '.nvm', 'versions', 'node')).sort().reverse()) {
+    for (const version of nvmVersionDirsNewestFirst(readdirSync(join(home, '.nvm', 'versions', 'node')))) {
       dirs.push(join(home, '.nvm', 'versions', 'node', version, 'bin'))
     }
   } catch {
@@ -206,7 +224,11 @@ export async function detectPi(): Promise<{ path: string | null; version: string
       break
     }
   }
-  if (!resolved) resolved = await whichFromPath(process.env)
+  // Search the PATH the spawned child will actually get — augmented with the
+  // homebrew/nvm/bun/volta bins — rather than the minimal one a Finder-launched
+  // app inherits: pi installed under an nvm node version is reachable only
+  // there. Same PATH as the spawn keeps "found" and "runnable" in agreement.
+  if (!resolved) resolved = await whichFromPath(safeChildEnvironment())
   if (!resolved) return { path: null, version: null }
   const version = await piVersion(resolved).catch(() => null)
   detectedPi = { path: resolved, version }
@@ -277,6 +299,18 @@ export interface RpcRuntimeCallbacks {
   onExit: (runtime: PiRpcRuntime) => void
 }
 
+/**
+ * True when a runtime died because one of pi's extensions refused to load.
+ * pi treats that as fatal and exits before answering, so this is the one
+ * startup failure the daemon can work around (daemon/agent.ts retries with
+ * --no-extensions). The message carries pi's own stderr line, see the exit
+ * handler below.
+ */
+export function isExtensionLoadFailure(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return /Failed to load extension/i.test(message)
+}
+
 export class PiRpcRuntime {
   readonly runtimeId = randomUUID()
   private readonly child: ChildProcess
@@ -294,6 +328,9 @@ export class PiRpcRuntime {
   // treat the turn as finished.
   private continuationPending = false
   private retryPending = false
+  /** Spawned with --no-extensions: pi's own extensions were skipped to survive
+   * a broken/incompatible one (see daemon/agent.ts). Reported via snapshot(). */
+  private readonly extensionsDisabled: boolean
 
   constructor(
     executable: string,
@@ -302,6 +339,7 @@ export class PiRpcRuntime {
     private readonly callbacks: RpcRuntimeCallbacks,
     extraEnvironment: NodeJS.ProcessEnv = {},
   ) {
+    this.extensionsDisabled = args.includes('--no-extensions')
     this.info = { runtimeId: this.runtimeId, cwd, isStreaming: false, isCompacting: false }
     this.child = spawn(executable, args, {
       cwd,
@@ -340,8 +378,11 @@ export class PiRpcRuntime {
       })
       stdout.on('error', failPipe)
     }
-    // stderr is collected separately and never forwarded to the renderer
-    // (it may contain secrets). Bounded to avoid unbounded memory growth.
+    // stderr is collected separately: the protocol stays clean and nothing is
+    // streamed live to the renderer. It is NOT discarded — on an unexpected
+    // exit the last lines go to daemon.log and one line (never more, and never
+    // the whole stream) is attached to the exit error, because pi puts the
+    // actual reason there. Bounded to avoid unbounded memory growth.
     if (stderr) {
       stderr.on('data', (chunk: Buffer) => {
         const slice = chunk.toString('utf8')
@@ -360,7 +401,13 @@ export class PiRpcRuntime {
       // stale-runtimeId report ("Runtime is no longer available") into an
       // undebuggable black hole.
       console.log(`[daemon] pi runtime ${this.runtimeId} exited (code ${code ?? '-'} signal ${signal ?? '-'}, expected=${this.stopped})`)
-      this.fail(new Error(`PI RPC exited (${code ?? signal ?? 'unknown'})`))
+      // pi explains itself on stderr and that text never travels over the
+      // protocol, so a bare exit code left users with nothing to act on
+      // ("PI RPC exited (1)" for a pi whose extension failed to load). Keep the
+      // full tail in the local log and the most useful line in the error.
+      const detail = this.stderrSummary()
+      if (!this.stopped && detail) console.log(`[daemon] pi runtime ${this.runtimeId} stderr:\n${this.stderrTail()}`)
+      this.fail(new Error(`PI RPC exited (${code ?? signal ?? 'unknown'})${detail ? `: ${detail}` : ''}`))
       this.emit({ type: 'runtime_exit', code, signal, expected: this.stopped })
       this.callbacks.onExit(this)
     })
@@ -368,7 +415,11 @@ export class PiRpcRuntime {
 
   snapshot(): RuntimeInfo {
     const streaming = this.info.isStreaming || this.continuationPending || this.retryPending
-    return Object.freeze({ ...this.info, isStreaming: streaming })
+    return Object.freeze({
+      ...this.info,
+      isStreaming: streaming,
+      ...(this.extensionsDisabled ? { extensionsDisabled: true } : {}),
+    })
   }
 
   /** Performs the protocol handshake: get_state. */
@@ -427,6 +478,28 @@ export class PiRpcRuntime {
   /** Last captured stderr (bounded), for diagnostics on crash. */
   stderr(): string {
     return this.stderrChunks.join('')
+  }
+
+  /**
+   * pi's own explanation for an unexpected exit, for the user-facing error.
+   * Prefers the LAST line starting with "Error" — that is where pi reports the
+   * cause (e.g. `Error: Failed to load extension …`) even when a stack trace or
+   * a node banner follows it. Falls back to the last non-empty line.
+   */
+  private stderrSummary(): string | null {
+    const lines = this.stderr()
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+    if (!lines.length) return null
+    const line = [...lines].reverse().find((l) => /^error\b/i.test(l)) ?? lines[lines.length - 1]!
+    return line.length > 300 ? `${line.slice(0, 300)}…` : line
+  }
+
+  /** Trailing stderr for the crash log, capped so daemon.log cannot balloon. */
+  private stderrTail(max = 2000): string {
+    const text = this.stderr().trimEnd()
+    return text.length > max ? text.slice(-max) : text
   }
 
   private async performStop(): Promise<boolean> {

@@ -1,5 +1,5 @@
 // Electron main: app lifecycle, BrowserWindow, IPC proxy layer to pion-daemon.
-import { app, BrowserWindow, ipcMain, dialog, shell, nativeTheme } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell, nativeTheme, screen } from 'electron'
 
 // Dev mode on Windows/Linux derives the app name from the binary ("electron");
 // macOS dev uses the patched Info.plist (scripts/patch-dock-name.mjs). Set it
@@ -7,8 +7,9 @@ import { app, BrowserWindow, ipcMain, dialog, shell, nativeTheme } from 'electro
 app.setName('Pion')
 import { join, basename, dirname } from 'node:path'
 import { copyFile, readFile, writeFile, rename } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
+import { existsSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
+import { parseWindowBounds, rectCenter, resolveWindowBounds, MIN_HEIGHT, MIN_WIDTH, type Rect } from './window-bounds'
 import type {
   AppMeta,
   ProjectRecord,
@@ -29,6 +30,7 @@ import type {
 } from '../../src/types'
 import { IPC } from '../../src/types'
 import { detectPi, safeChildEnvironment } from '../../daemon/pi-rpc'
+import { runPiInstall, stopPiInstall } from './pi-install'
 import { daemons } from './daemon-client'
 import { initUpdater } from './updater'
 import type { DaemonConnection } from './daemon-client'
@@ -498,6 +500,13 @@ function registerIpc(): void {
     return info
   })
 
+  // First-run setup page: install pi by running pi.dev's official installer in
+  // the background. Explicit user action only; progress streams to the renderer
+  // (state + rationale live in pi-install.ts).
+  ipcMain.handle(IPC.APP_PI_INSTALL, async (): Promise<{ started: boolean; error?: string }> =>
+    runPiInstall((event) => sendToRenderer(IPC.APP_PI_INSTALL_PROGRESS, event)),
+  )
+
   // Read-only view of the local pi's custom providers (~/.pi/agent/models.json).
   // API keys redact to a boolean; local-only (remote runtimes need daemon
   // methods, protocol v2 — settings-design.md §3.2).
@@ -551,12 +560,17 @@ function registerIpc(): void {
         (err, stdout) => (err ? reject(err) : resolve(stdout)),
       )
     })
+    // pi answers "No models available. Use /login to log into a provider…" on
+    // stdout with exit 0 when nothing is authenticated. That is a
+    // user-actionable state, not a parse failure — report it as an err.* code so
+    // the renderer shows translated text instead of a raw English string.
+    if (/no models available/i.test(stdout)) throw new Error('err.pi.noModels')
     const models: PiAvailableModel[] = []
     for (const line of stdout.split('\n').slice(1)) {
       const m = /^(\S+)\s+(\S+)/.exec(line)
       if (m) models.push({ provider: m[1]!, id: m[2]! })
     }
-    if (!models.length) throw new Error('pi --list-models returned no models.')
+    if (!models.length) throw new Error('err.pi.modelsUnparsed')
     modelsCatalogCache = models
     return models
   })
@@ -582,17 +596,49 @@ function registerIpc(): void {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
+// Window placement state (client-local: main owns window lifecycle)
+// ──────────────────────────────────────────────────────────────────────────
+
+const WINDOW_STATE_FILE = 'window-state.json'
+
+/** Last window frame, or null on first launch / unreadable state. */
+async function loadWindowBounds(): Promise<Rect | null> {
+  try {
+    return parseWindowBounds(JSON.parse(await readFile(join(app.getPath('userData'), WINDOW_STATE_FILE), 'utf8')))
+  } catch {
+    return null // missing, unreadable or invalid JSON: fall back to centering
+  }
+}
+
+// Sync on purpose: 'close' cannot await, and a dropped write would silently
+// forget the position. The file is one short line.
+function saveWindowBounds(win: BrowserWindow): void {
+  try {
+    writeFileSync(join(app.getPath('userData'), WINDOW_STATE_FILE), `${JSON.stringify(win.getNormalBounds())}\n`)
+  } catch (err) {
+    console.log(`[window-state] save failed: ${(err as Error).message}`)
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
 // App lifecycle
 // ──────────────────────────────────────────────────────────────────────────
 
 async function createWindow(): Promise<void> {
   const dark = nativeTheme.shouldUseDarkColors
   const appIconPath = join(app.getAppPath(), 'assets', 'pion-logo.png')
+  // Explicit placement is required on macOS: with no x/y the window lands flush
+  // under the menu bar (measured: winY === workArea.y, x centered) rather than
+  // centered as Electron's docs suggest. Which display to use: the one owning
+  // the saved frame, else — first launch — the one the cursor is on, so the
+  // window opens where the user is actually looking.
+  const saved = await loadWindowBounds()
+  const display = screen.getDisplayNearestPoint(saved ? rectCenter(saved) : screen.getCursorScreenPoint())
+  const bounds = resolveWindowBounds(saved, display.workArea)
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    minWidth: 800,
-    minHeight: 500,
+    ...bounds,
+    minWidth: MIN_WIDTH,
+    minHeight: MIN_HEIGHT,
     title: 'Pion',
     icon: appIconPath,
     // mac: inset traffic lights over a draggable in-app toolbar for the
@@ -610,6 +656,10 @@ async function createWindow(): Promise<void> {
       sandbox: false,
     },
   })
+  // Remember the frame for the next launch; getNormalBounds keeps the
+  // pre-maximize size when the user quit in a zoomed/fullscreen window.
+  const win = mainWindow
+  win.on('close', () => saveWindowBounds(win))
   // External links open in the system browser, never in-app navigation.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('http://') || url.startsWith('https://')) {
@@ -678,6 +728,13 @@ function isAlive(pid: number): boolean {
 process.on('SIGHUP', () => app.quit())
 
 app.whenReady().then(async () => {
+  // Warm the pi probe while the daemon starts and the window loads. detectPi
+  // caches a positive result, and everything below runs before the renderer asks
+  // for its boot check (daemon spawn + hello, window creation, bundle load), so
+  // the gate then answers from cache instead of spending ~200ms in `pi --version`
+  // with a "checking" screen on the way in. A missing pi is not cached, so the
+  // setup page's 重新检测 still probes fresh.
+  void detectPi().catch(() => {})
   startParentWatcher()
   if (process.platform === 'darwin') {
     app.dock?.setIcon(join(app.getAppPath(), 'assets', 'pion-logo.png'))
@@ -714,6 +771,7 @@ app.whenReady().then(async () => {
 // ladder as backstop. Remote connections just drop (the resident daemon on
 // the other machine owns its own processes).
 app.on('before-quit', () => {
+  stopPiInstall()
   void daemons.stopAll()
 })
 
