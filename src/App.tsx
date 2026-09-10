@@ -558,7 +558,6 @@ export default function App() {
           onArchiveSession={archiveSession}
           onUnarchiveSession={unarchiveSession}
           onRemoveProject={(p) => void removeProject(p)}
-          onLoadExtensions={(path) => window.pi.projects.extensions(path)}
         />
       )}
 
