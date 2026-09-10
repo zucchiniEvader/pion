@@ -215,9 +215,11 @@ textarea:focus-visible {
 .drag { -webkit-app-region: drag; }
 .no-drag, button, input, textarea, select, a { -webkit-app-region: no-drag; }
 
-/* Room for macOS inset traffic lights inside draggable toolbars. */
-html.mac .traffic-inset { padding-left: 80px; }
-html.mac .traffic-inset-tight { padding-left: 68px; }
+/* Room for macOS inset traffic lights inside draggable toolbars. The
+   Tahoe-size lights (16px, macOS 26+) end at ~74px, so both variants
+   reserve 88px to leave breathing room before the first toolbar button. */
+html.mac .traffic-inset { padding-left: 88px; }
+html.mac .traffic-inset-tight { padding-left: 88px; }
 
 /* Keycap chip for keyboard-shortcut hints (sidebar ⌘N). */
 .kbd {
@@ -322,6 +324,29 @@ html.mac .traffic-inset-tight { padding-left: 68px; }
 @keyframes dialog-in {
   from { opacity: 0; transform: translateY(6px) scale(0.97); }
   to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ─── Floating surfaces ──────────────────────────────────────────────────
+   The only two words a popup surface may use: ephemeral menus pick
+   .pop-card (slash autocomplete, model/project menus, extension prompts);
+   persistent state cards docked above the composer pick .dock-card
+   (todos). Shared radius/border/entrance motion; they differ only in
+   bg + shadow, and padding stays per call site. */
+@layer components {
+  .pop-card,
+  .dock-card {
+    animation: dialog-in 140ms cubic-bezier(0.2, 0.9, 0.3, 1) both;
+    border: 0.5px solid var(--line);
+    border-radius: 0.75rem;
+  }
+  .pop-card {
+    background-color: var(--canvas);
+    box-shadow: var(--shadow-pop);
+  }
+  .dock-card {
+    background-color: var(--panel);
+    box-shadow: var(--shadow-card);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -380,7 +380,7 @@ function DefaultModelPicker({
         <ChevronDown size={11} strokeWidth={2} className={cn('shrink-0 transition-transform', open && 'rotate-180')} />
       </button>
       {open && (
-        <div className="dialog-in absolute right-0 top-full z-30 mt-1.5 flex max-h-80 w-72 flex-col overflow-hidden rounded-xl border-[0.5px] border-line bg-canvas p-1 shadow-pop">
+        <div className="pop-card absolute right-0 top-full z-30 mt-1.5 flex max-h-80 w-72 flex-col overflow-hidden p-1">
           <div className="p-1 pb-1.5">
             <Input
               autoFocus

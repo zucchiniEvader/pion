@@ -11,6 +11,8 @@ import {
   ArchiveRestore,
   ArrowUpCircle,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ExternalLink,
   Folder,
   FolderOpen,
@@ -18,9 +20,9 @@ import {
   MessageCirclePlus,
   MessageSquarePlus,
   Pencil,
+  PanelLeftClose,
   Plus,
   Settings,
-  ShieldAlert,
   SquareKanban,
   SquarePen,
   Trash2,
@@ -68,8 +70,12 @@ interface SidebarProps {
   /** Promotes an archived session back into the regular list. */
   onUnarchiveSession: (session: SessionRecord) => void
   onRemoveProject: (project: ProjectRecord) => void
-  /** File names of the project's own PI extensions. */
-  onLoadExtensions: (projectPath: string) => Promise<string[]>
+  onCollapse: () => void
+  /** Back/forward over view transitions; disabled flags come from App's history. */
+  navBack: boolean
+  navForward: boolean
+  onNavBack: () => void
+  onNavForward: () => void
 }
 
 // Full-height navigation rail: projects as expandable groups, their tasks
@@ -101,7 +107,11 @@ export function Sidebar({
   onArchiveSession,
   onUnarchiveSession,
   onRemoveProject,
-  onLoadExtensions,
+  onCollapse,
+  navBack,
+  navForward,
+  onNavBack,
+  onNavForward,
 }: SidebarProps) {
   // Which project groups are expanded; the active project follows selection.
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set())
@@ -150,13 +160,10 @@ export function Sidebar({
     if (!p.runtime || p.runtime === 'local') return null
     return runtimeById.get(p.runtime)?.name ?? null
   }
-  const [extensions, setExtensions] = useState<string[] | null>(null)
   const [confirmRemove, setConfirmRemove] = useState(false)
   const openProjectMenu = (path: string) => {
     setMenuPath(path)
     setConfirmRemove(false)
-    setExtensions(null)
-    void onLoadExtensions(path).then(setExtensions).catch(() => setExtensions([]))
   }
 
   // Pi/extension upgrade availability: main runs the check async at startup;
@@ -167,8 +174,32 @@ export function Sidebar({
 
   return (
     <aside className="flex h-full w-[300px] shrink-0 flex-col border-r border-line bg-panel">
-      {/* Drag strip carrying the traffic lights. */}
-      <div className="drag traffic-inset-tight flex h-12 shrink-0 items-center gap-0.5 px-2" />
+      {/* Drag strip: traffic lights (native, left), view history + collapse docked right. */}
+      <div className="drag traffic-inset-tight flex h-12 shrink-0 items-center gap-0.5 px-2">
+        <button
+          className="no-drag rounded-md p-1.5 text-ink2 transition-colors hover:bg-fill-hover hover:text-ink disabled:pointer-events-none disabled:opacity-35"
+          title={t('header.back')}
+          disabled={!navBack}
+          onClick={onNavBack}
+        >
+          <ChevronLeft size={16} strokeWidth={1.75} />
+        </button>
+        <button
+          className="no-drag rounded-md p-1.5 text-ink2 transition-colors hover:bg-fill-hover hover:text-ink disabled:pointer-events-none disabled:opacity-35"
+          title={t('header.forward')}
+          disabled={!navForward}
+          onClick={onNavForward}
+        >
+          <ChevronRight size={16} strokeWidth={1.75} />
+        </button>
+        <button
+          className="no-drag ml-auto rounded-md p-1.5 text-ink2 transition-colors hover:bg-fill-hover hover:text-ink"
+          title={t('header.hideSidebar')}
+          onClick={onCollapse}
+        >
+          <PanelLeftClose size={16} strokeWidth={1.75} />
+        </button>
+      </div>
 
       {/* OverlayScrollArea hides the native scrollbar (styled webkit bars take
           layout width, which squeezed rows and reflowed the list on expand);
@@ -235,7 +266,7 @@ export function Sidebar({
                 <>
                   {/* Click-outside dismissal, same pattern as the project menu. */}
                   <div className="fixed inset-0 z-20" onClick={() => setAddProjectMenuOpen(false)} />
-                  <div className="dialog-in absolute right-0 top-full z-30 mt-1 min-w-[180px] rounded-xl border-[0.5px] border-line bg-canvas p-1 shadow-pop">
+                  <div className="pop-card absolute right-0 top-full z-30 mt-1 min-w-[180px] p-1">
                     <button
                       className="flex w-full items-center gap-2 rounded-lg px-2.5 py-[7px] text-left text-[13px] font-medium text-ink transition-colors hover:bg-fill-hover"
                       onClick={() => {
@@ -347,61 +378,39 @@ export function Sidebar({
                         <>
                           {/* Click-away catcher. */}
                           <div className="fixed inset-0 z-20" onClick={() => setMenuPath(null)} />
-                          <div className="dialog-in absolute right-1 top-full z-30 mt-1 w-72 overflow-hidden rounded-xl border-[0.5px] border-line bg-canvas p-2 shadow-pop">
-                            <p className="px-1.5 pb-1 text-[11px] font-semibold uppercase tracking-[0.06em] text-ink2">{p.name}</p>
-                            <div className="flex items-center gap-1.5 rounded-lg px-1.5 py-1.5">
-                              <code className="min-w-0 flex-1 select-text truncate font-mono text-[11px] text-ink2" title={p.path}>
-                                {p.path}
-                              </code>
-                              <button
-                                className="grid size-6 shrink-0 place-items-center rounded-md text-ink2 transition-colors hover:bg-fill-hover hover:text-ink"
-                                title={t('sidebar.showInFinder')}
-                                onClick={() => void window.pi.app.revealPath(p.path)}
-                              >
-                                <ExternalLink size={12} strokeWidth={1.75} />
-                              </button>
-                            </div>
-                            <div className="mt-1 border-t-[0.5px] border-line px-1.5 pb-1 pt-2">
-                              <p className="pb-1 text-[11px] font-semibold uppercase tracking-[0.06em] text-ink2">{t('sidebar.projectExtensions')}</p>
-                              {extensions === null ? (
-                                <p className="flex items-center gap-1.5 px-0.5 py-0.5 text-xs text-ink2">
-                                  <LoaderCircle size={11} className="animate-spin" /> {t('sidebar.loading')}
-                                </p>
-                              ) : extensions.length ? (
-                                <ul className="max-h-28 space-y-0.5 overflow-y-auto">
-                                  {extensions.map((name) => (
-                                    <li key={name} className="truncate font-mono text-[11px] text-ink" title={name}>
-                                      {name}
-                                    </li>
-                                  ))}
-                                </ul>
-                              ) : (
-                                <p className="px-0.5 py-0.5 text-xs text-ink2">{t('sidebar.noExtensions')}</p>
-                              )}
-                              <p className="flex gap-1.5 pt-1.5 text-[11px] leading-relaxed text-warn">
-                                <ShieldAlert size={13} strokeWidth={1.75} className="mt-px shrink-0" />
-                                {t('sidebar.extensionsWarning')}
-                              </p>
-                            </div>
-                            <div className="mt-1.5 border-t-[0.5px] border-line pt-1.5">
+                          <div className="pop-card absolute right-1 top-full z-30 mt-1 w-72 overflow-hidden p-1.5">
+                            <button
+                              className="flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5 text-left text-xs text-ink transition-colors hover:bg-fill-hover"
+                              onClick={() => {
+                                setMenuPath(null)
+                                void window.pi.app.revealPath(p.path)
+                              }}
+                            >
+                              <ExternalLink size={13} strokeWidth={1.75} className="shrink-0 text-ink2" />
+                              {t('sidebar.showInFinder')}
+                            </button>
+                            <div className="mt-1 border-t-[0.5px] border-line pt-1 pb-0.5">
                               {confirmRemove ? (
-                                <div className="flex items-center gap-1.5">
-                                  <button
-                                    className="min-w-0 flex-1 rounded-lg bg-bad px-2 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90"
-                                    onClick={() => {
-                                      setMenuPath(null)
-                                      onRemoveProject(p)
-                                    }}
-                                  >
-                                    {t('sidebar.confirmRemove')}
-                                  </button>
-                                  <button
-                                    className="rounded-lg px-2 py-1.5 text-xs text-ink2 transition-colors hover:bg-fill-hover hover:text-ink"
-                                    onClick={() => setConfirmRemove(false)}
-                                  >
-                                    {t('common.cancel')}
-                                  </button>
-                                </div>
+                                <>
+                                  <p className="px-1.5 pb-1 text-[11px] text-ink2">{t('sidebar.removeProjectHint')}</p>
+                                  <div className="flex items-center gap-1.5">
+                                    <button
+                                      className="min-w-0 flex-1 rounded-lg bg-bad px-2 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90"
+                                      onClick={() => {
+                                        setMenuPath(null)
+                                        onRemoveProject(p)
+                                      }}
+                                    >
+                                      {t('sidebar.confirmRemove')}
+                                    </button>
+                                    <button
+                                      className="rounded-lg px-2 py-1.5 text-xs text-ink2 transition-colors hover:bg-fill-hover hover:text-ink"
+                                      onClick={() => setConfirmRemove(false)}
+                                    >
+                                      {t('common.cancel')}
+                                    </button>
+                                  </div>
+                                </>
                               ) : (
                                 <button
                                   className="flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5 text-left text-xs text-bad transition-colors hover:bg-tint-bad"
@@ -610,7 +619,7 @@ const SessionRow = memo(function SessionRow({
         </ContextMenu.Trigger>
         <ContextMenu.Portal>
           <ContextMenu.Positioner className="outline-none">
-            <ContextMenu.Popup className="dialog-in min-w-[192px] rounded-xl border-[0.5px] border-line bg-canvas p-1 shadow-pop">
+            <ContextMenu.Popup className="pop-card min-w-[192px] p-1">
               <ContextMenu.Item
                 className="flex cursor-default items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[13px] font-medium text-ink outline-none select-none data-highlighted:bg-fill-hover"
                 onClick={() => {

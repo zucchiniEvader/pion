@@ -6,8 +6,8 @@ import { cn } from '@/lib/utils'
 // shadcn-style input primitive over Base UI's Input, tuned to the app's
 // hairline-border text field look.
 const inputVariants = cva(
-  'w-full rounded-lg border-[0.5px] border-line bg-canvas text-ink outline-none transition-colors ' +
-    'placeholder:text-ink2 focus:border-accent disabled:pointer-events-none disabled:opacity-40',
+  'w-full rounded-lg border-[0.5px] border-line bg-canvas text-ink outline-none transition-all ' +
+    'placeholder:text-ink2 focus:border-accent focus:shadow-[0_0_0_0.5px_var(--accent),0_0_0_3px_var(--tint-accent)] disabled:pointer-events-none disabled:opacity-40',
   {
     variants: {
       size: {

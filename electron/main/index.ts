@@ -596,8 +596,10 @@ async function createWindow(): Promise<void> {
     icon: appIconPath,
     // mac: inset traffic lights over a draggable in-app toolbar for the
     // native title-bar feel; other platforms keep their normal frame.
+    // y:16 centers the (Tahoe-size) lights on the 48px strip, matching the
+    // nav/collapse buttons whose icon centers sit at y=24.
     ...(process.platform === 'darwin'
-      ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 12, y: 11 } }
+      ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 12, y: 16 } }
       : {}),
     backgroundColor: dark ? '#1e1e20' : '#ffffff',
     webPreferences: {
@@ -677,7 +679,7 @@ process.on('SIGHUP', () => app.quit())
 app.whenReady().then(async () => {
   startParentWatcher()
   if (process.platform === 'darwin') {
-    app.dock.setIcon(join(app.getAppPath(), 'assets', 'pion-logo.png'))
+    app.dock?.setIcon(join(app.getAppPath(), 'assets', 'pion-logo.png'))
   }
   registerIpc()
   // Daemon (goal.md v3 §7): every business handler forwards through it, so

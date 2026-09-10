@@ -29,7 +29,7 @@ export function TodoPanel({ todos }: { todos: TodoItem[] }) {
 
   return (
     <div className="px-6 pb-2">
-      <div className="mx-auto w-full max-w-3xl rounded-xl border-[0.5px] border-line bg-panel px-3 py-2 shadow-card">
+      <div className="dock-card mx-auto w-full max-w-3xl px-3 py-2">
         <button
           className="flex w-full items-center gap-2 text-left"
           onClick={() => setCollapsed((v) => !v)}
