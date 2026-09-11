@@ -264,148 +264,112 @@ function ProvidersSection({ onDefaultModelChanged }: { onDefaultModelChanged: (p
   if (!data) return <LoaderCircle size={16} className="animate-spin text-ink2" />
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <h3 className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink2">{t('settings.nav.providers')}</h3>
-        {data.path && (
-          <div className="flex gap-1">
-            <button
-              className="flex h-7 items-center gap-1.5 rounded-lg border-[0.5px] border-line px-2.5 text-[11px] font-medium text-ink transition-colors hover:bg-fill-hover"
-              title={data.path}
-              onClick={() => void window.pi.app.openVSCode(data.path!)}
-            >
-              <ExternalLink size={12} strokeWidth={1.75} />
-              {t('settings.providers.openInEditor')}
-            </button>
-            <button
-              className="flex h-7 items-center gap-1.5 rounded-lg border-[0.5px] border-line px-2.5 text-[11px] font-medium text-ink transition-colors hover:bg-fill-hover"
-              onClick={() => void window.pi.app.revealPath(data.path!)}
-            >
-              <FolderOpen size={12} strokeWidth={1.75} />
-              {t('settings.providers.reveal')}
-            </button>
-          </div>
-        )}
-      </div>
+    <div data-settings-providers className="@container mx-auto flex max-w-[640px] flex-col gap-6">
+      <header>
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-xl font-semibold tracking-tight text-ink">{t('settings.nav.providers')}</h3>
+          <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-line px-2 py-1 text-[10px] text-ink2">
+            <Server size={11} />{t('settings.providers.thisDevice')}
+          </span>
+        </div>
+        <p className="mt-1.5 text-xs leading-relaxed text-ink2">{t('settings.providers.description')}</p>
+      </header>
 
-      <div className="flex items-center justify-between rounded-lg border-[0.5px] border-line bg-panel px-3 py-2.5">
-        <span className="text-[13px] font-medium text-ink">{t('settings.providers.defaultModel')}</span>
+      <section aria-labelledby="provider-default-model">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h4 id="provider-default-model" className="text-xs font-semibold text-ink">{t('settings.providers.defaultModel')}</h4>
+          <span className="text-[10px] text-ink2">{t('settings.providers.defaultHint')}</span>
+        </div>
         <DefaultModelPicker
-          current={
-            data.defaultProvider && data.defaultModel
-              ? { provider: data.defaultProvider, model: data.defaultModel }
-              : null
-          }
+          current={data.defaultProvider && data.defaultModel ? { provider: data.defaultProvider, model: data.defaultModel } : null}
           onPick={setDefault}
         />
-      </div>
+      </section>
 
-      {/* Credentials: pi's own store, written by the daemon on this machine. */}
-      <div className="rounded-lg border-[0.5px] border-line bg-panel">
-        <div className="flex items-center justify-between px-3 py-2.5">
-          <span className="flex items-center gap-1.5 text-[13px] font-medium text-ink">
-            <KeyRound size={13} strokeWidth={1.75} className="text-ink2" />
+      <section aria-labelledby="provider-credentials">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h4 id="provider-credentials" className="flex items-center gap-2 text-xs font-semibold text-ink">
             {t('settings.providers.credentials')}
-          </span>
+            {auth && <span className="text-[11px] font-normal tabular-nums text-ink2">{auth.configured.length}</span>}
+          </h4>
           {!adding && auth && (
-            <button
-              className="flex h-7 items-center gap-1.5 rounded-lg border-[0.5px] border-line px-2.5 text-[11px] font-medium text-ink transition-colors hover:bg-fill-hover"
-              onClick={() => setAdding(true)}
-            >
-              <Plus size={12} strokeWidth={2} />
-              {t('settings.providers.addKey')}
+            <button className="flex h-7 items-center gap-1.5 rounded-lg bg-accent px-2.5 text-[11px] font-medium text-white transition-colors hover:bg-accent-hover" onClick={() => setAdding(true)}>
+              <Plus size={12} />{t('settings.providers.addKey')}
             </button>
           )}
         </div>
-
         {adding && auth && (
-          <AddApiKeyForm
-            candidates={auth.candidates}
-            configured={auth.configured}
-            onSaved={(state) => {
-              setAuth(state)
-              setAdding(false)
-            }}
-            onCancel={() => setAdding(false)}
-          />
+          <AddApiKeyForm candidates={auth.candidates} configured={auth.configured}
+            onSaved={(state) => { setAuth(state); setAdding(false) }} onCancel={() => setAdding(false)} />
         )}
-
-        {!auth && !authError && (
-          <p className="flex items-center gap-2 px-3 pb-3 text-xs text-ink2">
-            <LoaderCircle size={13} className="animate-spin" />
-          </p>
-        )}
-
-        {auth && auth.configured.length === 0 && (
-          <p className="px-3 pb-3 text-[11px] text-ink2">{t('settings.providers.noCredentials')}</p>
-        )}
-
+        {!auth && !authError && <LoaderCircle size={14} className="animate-spin text-ink2" />}
+        {auth && auth.configured.length === 0 && <p className="rounded-xl border border-dashed border-line p-5 text-center text-xs text-ink2">{t('settings.providers.noCredentials')}</p>}
         {auth && auth.configured.length > 0 && (
-          <ul className="flex flex-col gap-1 px-2 pb-2">
+          <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line">
             {auth.configured.map((c) => (
-              <li key={c.id} className="flex items-center gap-2.5 rounded-lg px-1.5 py-1.5 hover:bg-fill-hover">
-                <span className="shrink-0 text-[13px] font-medium text-ink">{c.name}</span>
-                <span className="shrink-0 font-mono text-[11px] text-ink2">{c.id}</span>
-                {c.kind === 'api_key' ? (
-                  <Badge tone="ok" className="h-[20px] px-1.5 text-[10px]">
-                    {t('settings.providers.keyOk')}
-                  </Badge>
-                ) : (
-                  <Badge tone="purple" className="h-[20px] px-1.5 text-[10px]" title={t('settings.providers.oauthHint')}>
-                    {t('settings.providers.oauthBadge')}
-                  </Badge>
-                )}
-                {c.removable && (
-                  <button
-                    className={cn(
-                      'ml-auto grid size-6 shrink-0 place-items-center rounded-md transition-colors',
-                      confirmRemoveId === c.id ? 'bg-tint-bad text-bad' : 'text-ink2 hover:bg-fill-hover hover:text-ink',
-                    )}
-                    title={confirmRemoveId === c.id ? t('settings.removeConfirm') : t('settings.remove')}
-                    disabled={busy}
-                    onClick={() => void remove(c.id)}
-                  >
-                    <Trash2 size={13} strokeWidth={1.75} />
-                  </button>
-                )}
+              <li key={c.id} className="flex min-w-0 items-center gap-3 px-3 py-2.5 transition-colors hover:bg-panel">
+                <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded-lg border border-line bg-panel text-xs font-semibold text-ink2">{c.name.slice(0, 1).toUpperCase()}</span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-medium text-ink" title={c.name}>{c.name}</p>
+                  <p className="mt-0.5 truncate font-mono text-[10px] text-ink2" title={c.id}>{c.id}</p>
+                </div>
+                <span className={cn('flex shrink-0 items-center gap-1.5 text-[10px]', c.kind === 'api_key' ? 'text-ok' : 'text-ink2')} title={c.kind === 'oauth' ? t('settings.providers.oauthHint') : undefined}>
+                  {c.kind === 'api_key' ? <span className="size-1.5 rounded-full bg-ok" /> : <KeyRound size={11} />}
+                  {t(c.kind === 'api_key' ? 'settings.providers.keyOk' : 'settings.providers.oauthBadge')}
+                </span>
+                <div className="flex w-6 shrink-0 justify-end">
+                  {c.removable && (
+                    <button className={cn('grid size-6 place-items-center rounded-md transition-colors', confirmRemoveId === c.id ? 'bg-tint-bad text-bad' : 'text-ink2 hover:bg-tint-bad hover:text-bad')}
+                      title={confirmRemoveId === c.id ? t('settings.removeConfirm') : t('settings.remove')}
+                      aria-label={`${confirmRemoveId === c.id ? t('settings.removeConfirm') : t('settings.remove')} ${c.name}`}
+                      disabled={busy} onClick={() => void remove(c.id)}>
+                      {confirmRemoveId === c.id ? <Check size={13} /> : <Trash2 size={13} strokeWidth={1.75} />}
+                    </button>
+                  )}
+                </div>
               </li>
             ))}
           </ul>
         )}
+        <p className="mt-2.5 text-[10px] leading-relaxed text-ink2">{t('settings.providers.credentialsHint')}</p>
+        {authError && <p role="alert" className="mt-2 break-all text-xs text-bad">{authError}</p>}
+      </section>
 
-        <p className="px-3 pb-2.5 text-[11px] text-ink2">{t('settings.providers.credentialsHint')}</p>
-        {authError && <p className="px-3 pb-3 break-all text-xs text-bad">{authError}</p>}
-      </div>
-
-      <div className="px-1 text-[11px] font-semibold uppercase tracking-[0.06em] text-ink2">{t('settings.providers.custom')}</div>
-
-      <p className="-mt-2 px-1 text-[11px] text-ink2">{t('settings.providers.localOnly')}</p>
-
-      {data.providers.length === 0 ? (
-        <div className="rounded-lg border-[0.5px] border-dashed border-line px-3 py-6 text-center text-xs text-ink2">{t('settings.providers.empty')}</div>
-      ) : (
-        <ul className="flex flex-col gap-1">
-          {data.providers.map((p) => (
-            <li key={p.name} className="flex items-center gap-2.5 rounded-lg border-[0.5px] border-line bg-panel px-2.5 py-2">
-              <span className="shrink-0 text-[13px] font-medium text-ink">{p.name}</span>
-              {p.hasApiKey ? (
-                <span className="shrink-0 rounded bg-tint-ok px-1.5 py-px text-[10px] font-medium text-ok">{t('settings.providers.keyOk')}</span>
-              ) : (
-                <span className="shrink-0 rounded bg-fill-hover px-1.5 py-px text-[10px] font-medium text-ink2">{t('settings.providers.keyMissing')}</span>
-              )}
-              <span className="ml-auto flex min-w-0 shrink items-center gap-2 font-mono text-[11px] text-ink2">
-                <span className="truncate" title={p.baseUrl}>
-                  {p.baseUrl}
-                </span>
-                <span className="shrink-0">{p.api}</span>
-              </span>
-              <span className="shrink-0 rounded bg-fill-hover px-1.5 py-px text-[10px] tabular-nums text-ink2">
-                {t('settings.providers.models', { count: p.modelCount })}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
+      <section aria-labelledby="provider-custom">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h4 id="provider-custom" className="flex items-center gap-2 text-xs font-semibold text-ink">
+            {t('settings.providers.custom')}<span className="text-[11px] font-normal tabular-nums text-ink2">{data.providers.length}</span>
+          </h4>
+          {data.path && (
+            <div className="flex items-center gap-1">
+              <button className="flex h-7 items-center gap-1.5 rounded-md px-2 text-[11px] text-ink2 hover:bg-fill-hover hover:text-ink" title={data.path} onClick={() => void window.pi.app.openVSCode(data.path!)}>
+                <ExternalLink size={12} />{t('settings.providers.openInEditor')}
+              </button>
+              <button className="grid size-7 place-items-center rounded-md text-ink2 hover:bg-fill-hover hover:text-ink" title={t('settings.providers.reveal')} aria-label={t('settings.providers.reveal')} onClick={() => void window.pi.app.revealPath(data.path!)}><FolderOpen size={14} /></button>
+            </div>
+          )}
+        </div>
+        {data.providers.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-line px-3 py-6 text-center text-xs text-ink2">{t('settings.providers.empty')}</div>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {data.providers.map((p) => (
+              <li key={p.name} className="min-w-0 rounded-xl border border-line px-3 py-3">
+                <div className="flex items-center gap-2">
+                  <span className="min-w-0 flex-1 truncate text-xs font-medium text-ink" title={p.name}>{p.name}</span>
+                  <span className={cn('shrink-0 text-[10px]', p.hasApiKey ? 'text-ok' : 'text-ink2')}>{t(p.hasApiKey ? 'settings.providers.keyOk' : 'settings.providers.keyMissing')}</span>
+                  <span className="shrink-0 rounded-md bg-panel px-1.5 py-0.5 text-[10px] tabular-nums text-ink2">{t('settings.providers.models', { count: p.modelCount })}</span>
+                </div>
+                <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-ink2">
+                  <span className="min-w-0 flex-1 basis-48 truncate font-mono" title={p.baseUrl}>{p.baseUrl}</span>
+                  <span className="break-all">{p.api}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="mt-2.5 text-[10px] leading-relaxed text-ink2">{t('settings.providers.localOnly')}</p>
+      </section>
     </div>
   )
 }
@@ -601,19 +565,20 @@ function DefaultModelPicker({
   }
 
   return (
-    <span ref={rootRef} className="relative">
+    <span ref={rootRef} className="relative block min-w-0">
       <button
-        className="flex h-7 items-center gap-1.5 rounded-lg border-[0.5px] border-line bg-canvas px-2.5 text-xs font-medium text-ink transition-colors hover:bg-fill-hover"
+        className="flex w-full items-center justify-between gap-3 rounded-lg border border-line bg-canvas px-3 py-2.5 text-left text-xs font-medium text-ink transition-colors hover:bg-fill-hover"
+        aria-expanded={open}
         title={current ? `${current.provider}/${current.model}` : undefined}
         onClick={() => void toggle()}
       >
-        <span className="max-w-[220px] truncate font-mono">
-          {current ? `${current.provider}/${current.model}` : t('settings.providers.pickDefault')}
+        <span className="min-w-0">
+          {current ? <><span className="block break-all font-mono text-[13px]">{current.model}</span><span className="mt-1 block break-all text-[10px] font-normal text-ink2">{current.provider}</span></> : t('settings.providers.pickDefault')}
         </span>
         <ChevronDown size={11} strokeWidth={2} className={cn('shrink-0 transition-transform', open && 'rotate-180')} />
       </button>
       {open && (
-        <div className="pop-card absolute right-0 top-full z-30 mt-1.5 flex max-h-80 w-72 flex-col overflow-hidden p-1">
+        <div className="pop-card absolute right-0 top-full z-30 mt-1.5 flex max-h-80 w-full flex-col overflow-hidden p-1">
           <div className="p-1 pb-1.5">
             <Input
               autoFocus

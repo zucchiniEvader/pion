@@ -343,6 +343,9 @@ export const en: Record<MsgKey, string> = {
   'settings.general.themeDark': 'Dark',
   'settings.providers.openInEditor': 'Open in editor',
   'settings.providers.reveal': 'Reveal in Finder',
+  'settings.providers.thisDevice': 'This device',
+  'settings.providers.description': 'Manage model access and custom endpoints.',
+  'settings.providers.defaultHint': 'For new sessions',
   'settings.providers.defaultModel': 'Default model',
   'settings.providers.pickDefault': 'Pick a model…',
   'settings.providers.localOnly': 'Local machine only; a remote runtime\'s providers are configured on its own machine',
@@ -357,7 +360,7 @@ export const en: Record<MsgKey, string> = {
   'settings.providers.oauthHint': 'Signed in with OAuth — pi\'s own /login owns this credential',
   'settings.providers.credentialsHint':
     'Stored in pi\'s auth.json; new sessions pick a provider up right away, sessions that are already open need reopening',
-  'settings.providers.custom': 'Custom providers (models.json)',
+  'settings.providers.custom': 'Custom providers',
   'settings.providers.customBadge': 'Custom',
   'settings.providers.changeProvider': 'Change',
   'settings.providers.pickProvider': 'Search providers…',
