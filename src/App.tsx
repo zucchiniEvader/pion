@@ -180,10 +180,18 @@ export default function App() {
     void runBootCheck()
   }, [runBootCheck])
 
-  // Lazily fetch each known project's task list once.
+  // Lazily fetch each known project's task list once. In-flight guard: the
+  // effect re-fires on every sessionsByPath/projects commit, and without it
+  // a still-running refresh is reissued on every commit — at startup that
+  // turned into a storm of duplicate sessions.list calls (one daemon scan
+  // per issue) and the first paint took seconds.
+  const sessionsInFlight = useRef(new Set<string>())
   useEffect(() => {
     for (const p of projects) {
-      if (sessionsByPath[p.path] === undefined) void refreshSessions(p.path)
+      if (sessionsByPath[p.path] === undefined && !sessionsInFlight.current.has(p.path)) {
+        sessionsInFlight.current.add(p.path)
+        void refreshSessions(p.path).finally(() => sessionsInFlight.current.delete(p.path))
+      }
     }
   }, [projects, sessionsByPath, refreshSessions])
 
