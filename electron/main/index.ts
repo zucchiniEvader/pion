@@ -10,6 +10,7 @@ import { copyFile, readFile, writeFile, rename } from 'node:fs/promises'
 import { existsSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { parseWindowBounds, rectCenter, resolveWindowBounds, MIN_HEIGHT, MIN_WIDTH, type Rect } from './window-bounds'
+import { registerTerminalHandlers, killAllTerminals } from './terminal'
 import type {
   AppMeta,
   ProjectRecord,
@@ -335,6 +336,10 @@ function registerIpc(): void {
   })
   ipcMain.handle(IPC.APP_OPEN_GHOSTTY, async (_e, path: string) => openInApp('Ghostty', 'Ghostty.app', path))
   ipcMain.handle(IPC.APP_OPEN_VSCODE, async (_e, path: string) => openInApp('Visual Studio Code', 'Visual Studio Code.app', path))
+
+  // Integrated terminal (client-local, local-only v1): pty host lives in
+  // electron/main/terminal.ts — independent of the daemon and pi-rpc.
+  registerTerminalHandlers(() => mainWindow)
 
   // Changes-panel companion (client-local): widening the window makes room
   // for the panel instead of squeezing the session area. Grows toward the
@@ -855,6 +860,7 @@ app.whenReady().then(async () => {
 // the other machine owns its own processes).
 app.on('before-quit', () => {
   stopPiInstall()
+  killAllTerminals()
   void daemons.stopAll()
 })
 

@@ -16,6 +16,14 @@ export const IPC = {
   APP_OPEN_VSCODE: 'app:open-vscode',
   /** Width nudge for the right-side changes panel (client-local window op). */
   APP_GROW_WINDOW: 'app:grow-window',
+  // terminal (client-local integrated terminal, local-only v1)
+  TERMINAL_ATTACH: 'terminal:attach',
+  TERMINAL_INPUT: 'terminal:input',
+  TERMINAL_RESIZE: 'terminal:resize',
+  TERMINAL_KILL: 'terminal:kill',
+  /** main→renderer push: pty output / exit. */
+  TERMINAL_DATA: 'terminal:data',
+  TERMINAL_EXIT: 'terminal:exit',
   /** settings General: nativeTheme.themeSource sync (docs/settings-design.md §4). */
   APP_SET_THEME: 'app:set-theme',
   /** settings Updates: GUI app latest-release probe (client-local, 24h cache). */
@@ -329,6 +337,23 @@ export interface GitFileDiff {
   diff: string
   /** Output was cut at the daemon's line cap. */
   truncated: boolean
+}
+
+// ── terminal (client-local, electron/main/terminal.ts) ──
+
+export interface TerminalAttachResult {
+  /** Scrollback tail for replay on re-attach (empty on first spawn). */
+  buffer: string
+}
+
+export interface TerminalDataEvent {
+  projectPath: string
+  data: string
+}
+
+export interface TerminalExitEvent {
+  projectPath: string
+  exitCode: number
 }
 
 export interface SessionRecord {
@@ -843,6 +868,16 @@ export interface PiGuiApi {
     setEnabled: (projectPath: string, id: string, enabled: boolean) => Promise<CronJob>
     /** Fires the job immediately (outside its schedule). */
     runNow: (projectPath: string, id: string) => Promise<void>
+  }
+  /** Integrated terminal (client-local, local-only v1). One pty per project;
+   * attach is idempotent and replays the scrollback tail. */
+  terminal: {
+    attach: (projectPath: string) => Promise<TerminalAttachResult>
+    input: (projectPath: string, data: string) => Promise<void>
+    resize: (projectPath: string, cols: number, rows: number) => Promise<void>
+    kill: (projectPath: string) => Promise<void>
+    onData: (projectPath: string, cb: (data: string) => void) => () => void
+    onExit: (projectPath: string, cb: (exitCode: number) => void) => () => void
   }
   updates: {
     /** Latest cached result (null until the first check completes). */

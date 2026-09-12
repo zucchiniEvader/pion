@@ -25,6 +25,7 @@ import type {
   KanbanUpdateInput,
   CronCreateInput,
   CronJob,
+  TerminalAttachResult,
   SettingsResult,
   SettingsRuntime,
   SettingsPairingInfo,
@@ -383,6 +384,37 @@ const api: PiGuiApi = {
       return invoke<CronJob>(IPC.CRON_SET_ENABLED, assertProjectPath(projectPath), assertNonEmptyString(id, 'id'), enabled)
     },
     runNow: (projectPath, id) => invoke<void>(IPC.CRON_RUN_NOW, assertProjectPath(projectPath), assertNonEmptyString(id, 'id')),
+  },
+  terminal: {
+    attach: (projectPath) => invoke<TerminalAttachResult>(IPC.TERMINAL_ATTACH, assertProjectPath(projectPath)),
+    input: (projectPath, data) => invoke<void>(IPC.TERMINAL_INPUT, assertProjectPath(projectPath), assertString(data, 'data', 8192)),
+    resize: (projectPath, cols, rows) => {
+      for (const [v, name] of [[cols, 'cols'], [rows, 'rows']] as const) {
+        if (typeof v !== 'number' || !Number.isInteger(v) || v < 1 || v > 500) throw new TypeError(`${name} must be an integer in 1..500`)
+      }
+      return invoke<void>(IPC.TERMINAL_RESIZE, assertProjectPath(projectPath), cols, rows)
+    },
+    kill: (projectPath) => invoke<void>(IPC.TERMINAL_KILL, assertProjectPath(projectPath)),
+    // Filtered per-project subscriptions (dedicated listeners, NOT the
+    // single-callback `subscribe` helper — data and exit coexist).
+    onData: (projectPath, cb) => {
+      const path = assertProjectPath(projectPath)
+      if (typeof cb !== 'function') throw new TypeError('callback must be a function')
+      const listener = (_e: Electron.IpcRendererEvent, payload: unknown) => {
+        if (isObject(payload) && payload.projectPath === path && typeof payload.data === 'string') cb(payload.data)
+      }
+      ipcRenderer.on(IPC.TERMINAL_DATA, listener)
+      return () => ipcRenderer.removeListener(IPC.TERMINAL_DATA, listener)
+    },
+    onExit: (projectPath, cb) => {
+      const path = assertProjectPath(projectPath)
+      if (typeof cb !== 'function') throw new TypeError('callback must be a function')
+      const listener = (_e: Electron.IpcRendererEvent, payload: unknown) => {
+        if (isObject(payload) && payload.projectPath === path && typeof payload.exitCode === 'number') cb(payload.exitCode)
+      }
+      ipcRenderer.on(IPC.TERMINAL_EXIT, listener)
+      return () => ipcRenderer.removeListener(IPC.TERMINAL_EXIT, listener)
+    },
   },
   updates: {
     result: () => invoke<UpdateCheckResult | null>(IPC.VERSION_CHECK_RESULT),

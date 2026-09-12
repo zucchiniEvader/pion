@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 import { SettingsDialog, type SettingsSection } from '@/components/SettingsDialog'
 import { RemoteAddDialog } from '@/components/RemoteAddDialog'
 import { SchedulerPage } from '@/components/SchedulerPage'
-import { ChangesPanel, CHANGES_PANEL_WIDTH } from '@/components/ChangesPanel'
+import { RightSidebar, RIGHT_SIDEBAR_WIDTH, type RightTab } from '@/components/RightSidebar'
 import { Transcript } from '@/components/Transcript'
 import { Composer } from '@/components/Composer'
 import { ExtensionPrompt, findQuestionnaire } from '@/components/ExtensionPrompt'
@@ -74,6 +74,7 @@ export default function App() {
   }, [])
   const [addFromRuntime, setAddFromRuntime] = useState<SettingsRuntime | null>(null)
   const [changesOpen, setChangesOpen] = useState(false)
+  const [rightTab, setRightTab] = useState<RightTab>('changes')
   // Window-grow accounting for the changes panel: the grow IPC's promise is
   // kept so close can shrink by the APPLIED amount in order, even when the
   // round-trip outlives the toggle (no wide-window leftovers, no flash of
@@ -98,7 +99,7 @@ export default function App() {
     setSidebarOpen(false)
     setChangesOpen(true)
     changesMounted.current = true
-    changesGrow.current = window.pi.app.growWindow(CHANGES_PANEL_WIDTH)
+    changesGrow.current = window.pi.app.growWindow(RIGHT_SIDEBAR_WIDTH)
   }, [changesOpen, closeChanges])
   // Update-check subscription is owned HERE (single-subscriber rule): the
   // sidebar badge renders from the result, Settings > Updates drives actions.
@@ -817,7 +818,9 @@ export default function App() {
           <div className="border-t-[0.5px] border-bad/30 bg-tint-bad px-4 py-2 text-xs text-bad">{ue(active?.error ?? pool.error)}</div>
         )}
       </main>
-      {activeProject && (changesOpen || changesMounted.current) && <ChangesPanel project={activeProject} open={changesOpen} onClose={closeChanges} />}
+      {activeProject && (changesOpen || changesMounted.current) && (
+        <RightSidebar project={activeProject} open={changesOpen} tab={rightTab} onTabChange={setRightTab} onClose={closeChanges} />
+      )}
       <ImageLightbox />
       {settingsOpen && (
         <SettingsDialog

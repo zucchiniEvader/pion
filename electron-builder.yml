@@ -1,6 +1,7 @@
 # electron-builder 配置:产物输出到 release/(`npm run dist`)。
-# 运行时依赖为空(renderer 依赖已由 electron-vite 打进 bundle,main 无外部依赖),
-# 包内不含 node_modules;userData/缓存都走 app.getPath('userData'),与包分离。
+# 运行时依赖只有 node-pty(终端的 native 模块,postinstall 用 electron-rebuild
+# 按 Electron ABI 重编)——其余 renderer 依赖仍由 electron-vite 打进 bundle,
+# 除此例外外包内不携带其他 node_modules;userData/缓存都走 app.getPath('userData')。
 appId: com.pion.app
 productName: Pion
 # 钉住代码身份,否则每次重打包本地网络等 TCC 授权都失效(见 afterPack.cjs)
@@ -11,6 +12,11 @@ files:
   - out/**
   - assets/**
   - package.json
+  # 终端的 native pty 模块(唯一运行时依赖,见文件头注释)
+  - node_modules/node-pty/**
+# .node 二进制不能被 asar 加载,必须解包
+asarUnpack:
+  - node_modules/node-pty/build/**
 # kanban-bridge 扩展按 process.resourcesPath 定位(见 index.ts kanbanBridgePath),
 # 必须落在 Pion.app/Contents/Resources/ 下,供 pi 子进程以普通文件读取
 extraResources:

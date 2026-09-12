@@ -27,18 +27,21 @@
     "test:i18n": "node scripts/check-i18n-strings.mjs",
     "test:daemon": "node scripts/daemon-cli-test.mjs && node scripts/daemon-ws-test.mjs && node scripts/daemon-dial-test.mjs && node scripts/daemon-pairing-test.mjs",
     "daemon:package": "node scripts/package-daemon.mjs",
-    "postinstall": "node scripts/patch-dock-name.mjs",
+    "postinstall": "node scripts/patch-dock-name.mjs && electron-rebuild -m node_modules/node-pty",
     "dist": "npm run build && electron-builder --mac --publish never",
     "dist:dir": "npm run build && electron-builder --mac --dir"
   },
   "devDependencies": {
     "@base-ui/react": "^1.7.0",
+    "@electron/rebuild": "^4.2.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^22.10.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.5",
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^5.2.0",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "electron": "^44.3.0",
@@ -58,6 +61,7 @@
     "ws": "^8.21.3"
   },
   "dependencies": {
-    "electron-updater": "^6.8.9"
+    "electron-updater": "^6.8.9",
+    "node-pty": "^1.1.0"
   }
 }

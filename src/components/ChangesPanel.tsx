@@ -1,22 +1,15 @@
-import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
-import { FileDiff, LoaderCircle, X } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { LoaderCircle } from 'lucide-react'
 import type { GitChangedFile, GitFileDiff, GitStatusResult, ProjectRecord } from '@/types'
 import { useI18n } from '@/i18n'
-import { cn } from '@/lib/utils'
 
 interface ChangesPanelProps {
   project: ProjectRecord
-  /** Open state — the panel stays mounted after first open and animates its
-   * width (0 ↔ draggable width) instead of mount/unmount popping. */
+  /** RightSidebar tab visibility — polling runs only while shown. */
   open: boolean
-  onClose: () => void
 }
 
 const POLL_MS = 4_000
-/** Default panel width — App grows the window by exactly this on open. */
-export const CHANGES_PANEL_WIDTH = 560
-const DEFAULT_WIDTH = CHANGES_PANEL_WIDTH
-const MIN_WIDTH = 320
 
 // One-letter badge per file. x = staged, y = worktree; prefer the worktree
 // side (what the user sees on disk), fall back to the staged side.
@@ -62,24 +55,19 @@ function DiffLines({ diff }: { diff: string }) {
   )
 }
 
-// Right-side panel: every changed file's unified diff as ONE continuous
-// scrollable list — file headers act as dividers (sticky while scrolling),
-// the next file follows naturally. pi has no "files the agent touched" API,
-// so `git status` + per-file `git diff HEAD` is the displayed truth (user
-// decision). The file list polls; diffs refetch only when the list actually
-// changes (a stable working tree costs one `git status` per poll, nothing
-// more). Width is draggable at the left divider.
-export function ChangesPanel({ project, open, onClose }: ChangesPanelProps) {
+// Changes tab of the RightSidebar: every changed file's unified diff as ONE
+// continuous scrollable list (sticky file headers as dividers), plus a
+// compact overview list up top that jumps to each section. pi has no "files
+// the agent touched" API, so `git status` + per-file `git diff HEAD` is the
+// displayed truth (user decision). The file list polls; diffs refetch only
+// when the list actually changes (a stable tree costs one `git status`).
+// The frame (tabs, width, drag, animation) lives in RightSidebar.
+export function ChangesPanel({ project, open }: ChangesPanelProps) {
   const { t } = useI18n()
   const [result, setResult] = useState<GitStatusResult | null>(null)
   // path → diff (or null while its fetch is in flight).
   const [diffs, setDiffs] = useState<Record<string, GitFileDiff | null>>({})
-  const [width, setWidth] = useState(DEFAULT_WIDTH)
-  // While dragging, the width transition must be OFF — it exists for the
-  // open/close animation; left on, every drag frame eases over 200ms and
-  // the edge chases the mouse instead of tracking it.
-  const [dragging, setDragging] = useState(false)
-  const outerRef = useRef<HTMLDivElement | null>(null)
+  const rootRef = useRef<HTMLDivElement | null>(null)
   const timer = useRef<ReturnType<typeof setInterval> | null>(null)
   const listSig = useRef('')
 
@@ -112,13 +100,14 @@ export function ChangesPanel({ project, open, onClose }: ChangesPanelProps) {
     }
   }, [project.path])
 
-  // Polling only while open: a closed panel freezes its last snapshot for
-  // the slide-out animation and resumes fresh on the next open.
+  // Polling only while shown: a hidden/closed tab freezes its last snapshot
+  // and resumes fresh when shown again.
   useEffect(() => {
     if (!open) {
       if (timer.current) clearInterval(timer.current)
       return
     }
+    // Fresh (re)show or project switch: drop the previous snapshot.
     setResult(null)
     setDiffs({})
     listSig.current = ''
@@ -129,66 +118,9 @@ export function ChangesPanel({ project, open, onClose }: ChangesPanelProps) {
     }
   }, [refresh, open])
 
-
-
-  const onDragStart = (e: ReactMouseEvent) => {
-    e.preventDefault()
-    const startX = e.clientX
-    const startW = width
-    // Hard-clamp the width STATE to the space that actually exists:
-    // window − left sidebar − main's min-width. Flex capping alone only
-    // clips the outer wrapper; the inner column (state-wide) then overhangs
-    // it and right-aligned content (reveal icons, the X) shears off — the
-    // "right side pops out" effect. With the state itself clamped, the
-    // divider just stops at the edge.
-    const row = outerRef.current?.parentElement
-    const leftW = row?.children[0]?.getBoundingClientRect().width ?? 0
-    const rowW = row?.clientWidth ?? window.innerWidth
-    const maxFit = Math.max(MIN_WIDTH, Math.round(rowW - leftW - 520))
-    const maxW = Math.min(maxFit, Math.round(window.innerWidth * 0.85))
-    setDragging(true)
-    const move = (ev: MouseEvent) => {
-      setWidth(Math.min(Math.max(startW + (startX - ev.clientX), MIN_WIDTH), maxW))
-    }
-    const up = () => {
-      setDragging(false)
-      window.removeEventListener('mousemove', move)
-      window.removeEventListener('mouseup', up)
-    }
-    window.addEventListener('mousemove', move)
-    window.addEventListener('mouseup', up)
-  }
-
   return (
-    // Outer animates width (0 ↔ draggable) and clips; the inner column keeps
-    // the full width so content never reflows mid-animation (same structure
-    // as the left sidebar's collapse). `shrink` (not shrink-0) lets flex cap
-    // the panel when the drag overshoots the free space — the row then
-    // compresses THIS wrapper instead of pushing the panel past the window's
-    // right edge (main keeps its min-width, nothing overflows outside).
-    <div
-      ref={outerRef}
-      className={cn('h-full min-w-0 shrink overflow-hidden', !dragging && 'transition-[width] duration-200 ease-out')}
-      style={{ width: open ? width : 0 }}
-    >
-    <aside className="relative flex h-full flex-col border-l border-line bg-panel" style={{ width, minWidth: width }}>
-      {/* Drag handle on the divider; the border stays the visual affordance. */}
-      <div className="absolute -left-0.5 top-0 z-10 h-full w-1 cursor-col-resize" onMouseDown={onDragStart} />
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b-[0.5px] border-line px-3">
-        <FileDiff size={15} strokeWidth={1.75} className="text-ink2" />
-        <h2 className="text-[13px] font-semibold">{t('changes.title')}</h2>
-        {result && result.files.length > 0 && (
-          <span className="rounded-full bg-fill-hover px-1.5 py-px text-[10px] font-medium tabular-nums text-ink2">{result.files.length}</span>
-        )}
-        <button
-          className="ml-auto rounded-md p-1 text-ink2 transition-colors hover:bg-fill-hover hover:text-ink"
-          title={t('common.close')}
-          onClick={onClose}
-        >
-          <X size={14} strokeWidth={1.75} />
-        </button>
-      </header>
-      {result && result.files.length > 0 && (
+    <div ref={rootRef} className="flex min-h-0 flex-1 flex-col">
+      {result !== null && result.files.length > 0 && (
         // Overview: every changed file as a compact list — the diffs below
         // are one long scroll, so this is how you see WHAT changed without
         // reading everything. Click jumps to the file's section.
@@ -202,7 +134,7 @@ export function ChangesPanel({ project, open, onClose }: ChangesPanelProps) {
                     className="flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-fill-hover"
                     title={f.path}
                     onClick={() => {
-                      outerRef.current
+                      rootRef.current
                         ?.querySelector(`[data-file="${CSS.escape(f.path)}"]`)
                         ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
                     }}
@@ -252,7 +184,6 @@ export function ChangesPanel({ project, open, onClose }: ChangesPanelProps) {
           })
         )}
       </div>
-    </aside>
     </div>
   )
 }
