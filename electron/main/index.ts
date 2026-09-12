@@ -39,6 +39,9 @@ import { initPlugins, stopPluginInstall } from './plugins'
 import type { DaemonConnection } from './daemon-client'
 
 let mainWindow: BrowserWindow | null = null
+/** Set on before-quit: the macOS hide-on-close path must not swallow a real
+ * quit (Cmd+Q, update install). */
+let quitting = false
 
 function sendToRenderer(channel: string, payload: unknown): void {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, payload)
@@ -782,6 +785,15 @@ async function createWindow(): Promise<void> {
   // pre-maximize size when the user quit in a zoomed/fullscreen window.
   const win = mainWindow
   win.on('close', () => saveWindowBounds(win))
+  // macOS close-without-quit (red button / Cmd+W): hide instead of
+  // destroying the window — a dock re-open shows the SAME renderer with all
+  // state intact (the native behavior), no reload, no restore machinery.
+  win.on('close', (e) => {
+    if (process.platform === 'darwin' && !quitting) {
+      e.preventDefault()
+      win.hide()
+    }
+  })
   win.on('closed', () => panelGrowOffset.delete(win.id))
   // External links open in the system browser, never in-app navigation.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -885,7 +897,10 @@ app.whenReady().then(async () => {
   daemons.localConnection.onReady(() => void rehydrateAfterReconnect('local'))
   await createWindow()
   app.on('activate', async () => {
-    if (BrowserWindow.getAllWindows().length === 0) await createWindow()
+    // Hidden (not closed) windows come back as-is; only a real close or a
+    // crashed renderer needs a fresh window.
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show()
+    else if (BrowserWindow.getAllWindows().length === 0) await createWindow()
   })
 })
 
@@ -895,6 +910,7 @@ app.whenReady().then(async () => {
 // ladder as backstop. Remote connections just drop (the resident daemon on
 // the other machine owns its own processes).
 app.on('before-quit', () => {
+  quitting = true
   stopPiInstall()
   stopPluginInstall()
   killAllTerminals()
