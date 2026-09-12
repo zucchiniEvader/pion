@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import type { AgentStartOptions, ContextUsage, PiAvailableModel, PiCommandInfo, PiEventEnvelope, PromptImage, RuntimeInfo } from '@/types'
 import { applyEvent, appendNotice, createTranscript, hydrateTranscript, needsHistoryHydration, type TranscriptMessage } from '@/lib/eventReducer'
+import { fmtDur } from '@/lib/reltime'
 import { useI18n } from '@/i18n'
 
 export type RuntimeStatus = 'idle' | 'running' | 'starting' | 'stopping' | 'error'
@@ -83,7 +84,7 @@ function noticeTone(value: unknown): 'info' | 'warning' | 'error' {
 // envelope.runtimeId to that runtime's own SessionState, so pooled runtimes
 // keep streaming in the background while only `activeId` is on screen.
 export function useSessionPool() {
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
   const [sessions, setSessions] = useState<Map<string, SessionState>>(() => new Map())
   const [activeId, setActiveId] = useState<string | null>(null)
   // Set while an agent.start call is in flight (no runtimeId exists yet).
@@ -94,6 +95,10 @@ export function useSessionPool() {
   sessionsRef.current = sessions
   const activeIdRef = useRef(activeId)
   activeIdRef.current = activeId
+  // The event subscription is registered once ([] deps); keep the latest
+  // i18n for text composed inside it (completion notification).
+  const i18nRef = useRef({ t, lang })
+  i18nRef.current = { t, lang }
 
   // Patch one session immutably (new Map + new state object for StrictMode).
   const patchSession = useCallback((runtimeId: string, patch: (s: SessionState) => SessionState) => {
@@ -235,7 +240,20 @@ export function useSessionPool() {
       applyOne(rid, event, envelope)
       // agent_settled is the stable idle boundary: this run's usage has landed,
       // so the context estimate is worth re-reading here.
-      if (event.type === 'agent_settled') void refreshContextUsage(rid)
+      if (event.type === 'agent_settled') {
+        void refreshContextUsage(rid)
+        // Completion notification — but only when the user is not already
+        // watching this session (a foreground, focused run finishing on
+        // screen needs no banner). Mirrors the unread-badge boundary.
+        if (activeIdRef.current !== rid || document.hidden || !document.hasFocus()) {
+          const s = sessionsRef.current.get(rid)
+          const { t: tNow, lang: langNow } = i18nRef.current
+          const project = s?.runtime?.cwd?.split('/').filter(Boolean).pop() || 'Pion'
+          const durMs = s?.startedAt ? Date.now() - s.startedAt : null
+          const body = durMs != null ? tNow('transcript.workDone', { dur: fmtDur(durMs, langNow) }) : tNow('notify.done')
+          void window.pi.app.notify({ title: project, body }).catch(() => undefined)
+        }
+      }
     })
     return () => {
       unsubscribe()

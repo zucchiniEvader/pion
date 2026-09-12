@@ -374,6 +374,7 @@ export const en: Record<MsgKey, string> = {
   'settings.nav.providers': 'Providers',
   'settings.nav.runtimes': 'Runtimes',
   'settings.nav.plugins': 'Plugins',
+  'notify.done': 'Task complete',
   'settings.nav.about': 'About',
   'settings.general.language': 'Language',
   'settings.general.langSystem': 'System',

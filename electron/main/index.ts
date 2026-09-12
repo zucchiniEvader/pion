@@ -1,5 +1,5 @@
 // Electron main: app lifecycle, BrowserWindow, IPC proxy layer to pion-daemon.
-import { app, BrowserWindow, ipcMain, dialog, shell, nativeTheme, screen } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell, nativeTheme, screen, Notification } from 'electron'
 
 // Dev mode on Windows/Linux derives the app name from the binary ("electron");
 // macOS dev uses the patched Info.plist (scripts/patch-dock-name.mjs). Set it
@@ -569,6 +569,25 @@ function registerIpc(): void {
     const info: GuiUpdateInfo = { version: app.getVersion(), latest, releaseUrl, checkedAt: new Date().toISOString() }
     guiLatestCache = { at: now, info }
     return info
+  })
+
+  // Task-completion notification (renderer decides WHEN — agent_settled for
+  // a session the user is not watching). Click focuses the window.
+  ipcMain.handle(IPC.APP_NOTIFY, (_e, payload: { title?: unknown; body?: unknown }): boolean => {
+    if (!Notification.isSupported()) return false
+    const title = typeof payload?.title === 'string' ? payload.title.slice(0, 200) : ''
+    const body = typeof payload?.body === 'string' ? payload.body.slice(0, 500) : ''
+    if (!title) return false
+    const n = new Notification({ title, body })
+    n.on('click', () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        if (mainWindow.isMinimized()) mainWindow.restore()
+        mainWindow.show()
+        mainWindow.focus()
+      }
+    })
+    n.show()
+    return true
   })
 
   // First-run setup page: install pi by running pi.dev's official installer in

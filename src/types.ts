@@ -40,6 +40,8 @@ export const IPC = {
   APP_MODELS_LIST: 'app:models-list',
   /** settings Providers: writes defaultProvider/defaultModel into pi's settings.json. */
   APP_DEFAULT_MODEL_SET: 'app:default-model-set',
+  /** Posts a system notification (task completion); click focuses the window. */
+  APP_NOTIFY: 'app:notify',
   // git (project branch / worktree)
   GIT_OVERVIEW: 'git:overview',
   GIT_WORKTREE_CREATE: 'git:worktree-create',
@@ -790,6 +792,9 @@ export interface PiGuiApi {
     installPi: () => Promise<{ started: boolean; error?: string }>
     /** Subscribes to installer progress; returns an unsubscribe function. */
     onInstallProgress: (cb: (e: UpdateProgressEvent) => void) => () => void
+    /** Posts a system notification (agent run finished). Resolves false when
+     * the OS declined it (unsupported / no permission). */
+    notify: (payload: { title: string; body: string }) => Promise<boolean>
     /** Full model catalog from `pi --list-models` (cached in main). */
     modelsList: () => Promise<PiAvailableModel[]>
     /** Persists defaultProvider/defaultModel into pi's settings.json. */

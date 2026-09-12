@@ -378,6 +378,7 @@ export const zh = {
   'settings.nav.providers': '模型与提供商',
   'settings.nav.runtimes': '运行时',
   'settings.nav.plugins': '插件',
+  'notify.done': '任务完成',
   'settings.nav.about': '关于',
   'settings.general.language': '语言',
   'settings.general.langSystem': '跟随系统',
