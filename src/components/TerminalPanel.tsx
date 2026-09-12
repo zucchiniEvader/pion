@@ -4,6 +4,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import type { ProjectRecord } from '@/types'
 import { useI18n } from '@/i18n'
+import { onTerminalPrefsChange, readTerminalPrefs } from '@/lib/terminalPrefs'
 
 interface TerminalPanelProps {
   project: ProjectRecord
@@ -23,9 +24,10 @@ export function TerminalPanel({ project }: TerminalPanelProps) {
   useEffect(() => {
     const host = hostRef.current
     if (!host) return
+    const prefs = readTerminalPrefs()
     const term = new Terminal({
-      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
-      fontSize: 12,
+      fontFamily: prefs.fontFamily,
+      fontSize: prefs.fontSize,
       cursorBlink: true,
       scrollback: 5000,
       // Follow the app theme (read once at mount — a theme switch repaints
@@ -56,6 +58,17 @@ export function TerminalPanel({ project }: TerminalPanelProps) {
       if (!disposed) setExited(code)
     })
     const input = term.onData((data) => void window.pi.terminal.input(project.path, data))
+    // Settings ▸ 终端字体 changes apply live (renderer-local prefs event).
+    const offPrefs = onTerminalPrefsChange((p) => {
+      term.options.fontFamily = p.fontFamily
+      term.options.fontSize = p.fontSize
+      try {
+        fit.fit()
+      } catch {
+        /* host hidden mid-transition */
+      }
+      void window.pi.terminal.resize(project.path, term.cols, term.rows)
+    })
     const ro = new ResizeObserver(() => {
       try {
         fit.fit()
@@ -68,6 +81,7 @@ export function TerminalPanel({ project }: TerminalPanelProps) {
     return () => {
       disposed = true
       input.dispose()
+      offPrefs()
       offData()
       offExit()
       ro.disconnect()

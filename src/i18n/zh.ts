@@ -382,6 +382,7 @@ export const zh = {
   'settings.general.langZh': '中文',
   'settings.general.langEn': 'English',
   'settings.general.appearance': '外观',
+  'settings.general.terminalFont': '终端字体',
   'settings.general.themeSystem': '跟随系统',
   'settings.general.themeLight': '浅色',
   'settings.general.themeDark': '深色',

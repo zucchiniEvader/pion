@@ -43,6 +43,7 @@ import type {
 import { Badge } from '@/components/ui/badge'
 import { useI18n, useUserErrorMessage } from '@/i18n'
 import { applyTheme, persistTheme, readStoredTheme } from '@/theme'
+import { readTerminalPrefs, writeTerminalPrefs, DEFAULT_TERMINAL_FONT_FAMILY, type TerminalPrefs } from '@/lib/terminalPrefs'
 import { AppLogo } from '@/components/AppLogo'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
@@ -217,6 +218,37 @@ function GeneralSection() {
           ]}
         />
       </SettingsRow>
+      <SettingsRow label={t('settings.general.terminalFont')}>
+        <TerminalFontControls />
+      </SettingsRow>
+    </div>
+  )
+}
+
+// Terminal font family (freeform, empty = default) + size (preset steps).
+// Renderer-local prefs (src/lib/terminalPrefs.ts) — a live terminal applies
+// them immediately via the prefs-change event.
+function TerminalFontControls() {
+  const [prefs, setPrefs] = useState(readTerminalPrefs)
+  const update = (patch: Partial<TerminalPrefs>) => {
+    const next = { ...prefs, ...patch }
+    setPrefs(next)
+    writeTerminalPrefs(next)
+  }
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        value={prefs.fontFamily}
+        onChange={(e) => update({ fontFamily: e.target.value })}
+        placeholder={DEFAULT_TERMINAL_FONT_FAMILY}
+        spellCheck={false}
+        className="h-8 w-64 rounded-lg border-[0.5px] border-line bg-panel px-2.5 font-mono text-xs text-ink outline-none placeholder:text-ink2/60 focus:border-ink/30"
+      />
+      <Segmented
+        value={String(prefs.fontSize)}
+        onChange={(v) => update({ fontSize: Number(v) })}
+        options={['10', '12', '14', '16', '18'].map((s) => ({ value: s, label: s }))}
+      />
     </div>
   )
 }

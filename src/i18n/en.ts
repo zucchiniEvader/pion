@@ -378,6 +378,7 @@ export const en: Record<MsgKey, string> = {
   'settings.general.langZh': '中文',
   'settings.general.langEn': 'English',
   'settings.general.appearance': 'Appearance',
+  'settings.general.terminalFont': 'Terminal font',
   'settings.general.themeSystem': 'System',
   'settings.general.themeLight': 'Light',
   'settings.general.themeDark': 'Dark',
