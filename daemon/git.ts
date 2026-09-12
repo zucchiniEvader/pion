@@ -193,7 +193,7 @@ export async function createWorktree(projectPath: string, branch: string): Promi
 // session listings they require the path to be a registered project that
 // still exists on disk. Moved verbatim from Electron main; error texts are
 // byte-identical (renderer i18n depends on them).
-async function assertProjectDirectory(projectPath: string): Promise<void> {
+export async function assertProjectDirectory(projectPath: string): Promise<void> {
   if (typeof projectPath !== 'string' || !projectPath) throw new Error('projectPath must be a non-empty string')
   const projects = await loadProjects()
   if (!projects.some((p) => p.path === projectPath)) throw new Error('Not a registered project.')

@@ -73,12 +73,12 @@ interface SettingsDialogProps {
 
 type AddMode = 'pairing' | 'manual' | 'install'
 
-/** Static server that hosts install.sh + the pion-daemon bundle
- * (scripts/package-daemon.mjs publishes release/daemon-cli/ there). There is
- * no public download host: leave this empty and either paste your own mirror
- * URL here (an intranet mirror needs no rebuild), or use the pairing tab,
- * which hands the daemon file over directly. */
-const DEFAULT_DAEMON_DL_BASE = ''
+/** Public download host for install.sh + the pion-daemon bundle: GitHub
+ * Releases (`npm run publish:daemon-github` uploads the assets; the
+ * releases/latest/download base always serves the newest ones). Paste an
+ * intranet mirror URL here to override (no rebuild needed), or use the
+ * pairing tab, which hands the daemon file over directly. */
+const DEFAULT_DAEMON_DL_BASE = 'https://github.com/zucchiniEvader/pion/releases/latest/download'
 
 // Settings dialog (docs/settings-design.md): a left-nav shell with five
 // sections. General = language + appearance; Providers = read-only view of
@@ -1081,6 +1081,7 @@ function RuntimesSection({ runtimes, onRefresh }: { runtimes: SettingsRuntime[];
               </button>
             </div>
             <p className="text-[11px] text-ink2">{t('settings.installStep2')}</p>
+            <p className="text-[11px] text-ink2">{t('settings.installTerminalHint')}</p>
             <p className="break-all text-[11px] text-ink2">{t('settings.installMirrorHint')}</p>
           </div>
         )}

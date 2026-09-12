@@ -87,6 +87,14 @@ function wireConnectionEvents(conn: DaemonConnection): void {
   conn.onEvent('kanban.changed', (payload) => {
     sendToRenderer(IPC.KANBAN_CHANGED, payload)
   })
+  // Remote terminal (daemon-side pty host); the local terminal is main-hosted
+  // and never emits these daemon channels.
+  conn.onEvent('terminal.data', (payload) => {
+    sendToRenderer(IPC.TERMINAL_DATA, payload)
+  })
+  conn.onEvent('terminal.exit', (payload) => {
+    sendToRenderer(IPC.TERMINAL_EXIT, payload)
+  })
   // version-check is a LOCAL daemon concern (this machine's pi + extensions);
   // remote daemons do broadcast it, but renderer update state stays local.
   if (conn.id === 'local') {
@@ -337,9 +345,16 @@ function registerIpc(): void {
   ipcMain.handle(IPC.APP_OPEN_GHOSTTY, async (_e, path: string) => openInApp('Ghostty', 'Ghostty.app', path))
   ipcMain.handle(IPC.APP_OPEN_VSCODE, async (_e, path: string) => openInApp('Visual Studio Code', 'Visual Studio Code.app', path))
 
-  // Integrated terminal (client-local, local-only v1): pty host lives in
-  // electron/main/terminal.ts — independent of the daemon and pi-rpc.
-  registerTerminalHandlers(() => mainWindow)
+  // Integrated terminal (client-local for LOCAL projects; a project owned
+  // by a remote runtime proxies to its daemon's pty host, terminal.data/
+  // exit arrive via wireConnectionEvents like every other daemon event).
+  registerTerminalHandlers(
+    () => mainWindow,
+    (projectPath) => {
+      const conn = daemons.resolve(projectPath)
+      return conn.id === 'local' ? null : conn
+    },
+  )
 
   // Changes-panel companion (client-local): widening the window makes room
   // for the panel instead of squeezing the session area. Grows toward the

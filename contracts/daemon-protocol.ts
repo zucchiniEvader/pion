@@ -13,6 +13,9 @@ import type {
   GitFileDiff,
   GitOverview,
   GitStatusResult,
+  TerminalAttachResult,
+  TerminalDataEvent,
+  TerminalExitEvent,
   KanbanAssignInput,
   KanbanBoard,
   KanbanCard,
@@ -166,6 +169,8 @@ export type DaemonEventChannel =
   | 'kanban.changed'
   | 'version-check.result'
   | 'version-check.progress'
+  | 'terminal.data'
+  | 'terminal.exit'
 
 export interface DaemonEventMap {
   'agent.event': PiEventEnvelope
@@ -173,6 +178,10 @@ export interface DaemonEventMap {
   'kanban.changed': KanbanChangeEvent
   'version-check.result': UpdateCheckResult
   'version-check.progress': UpdateProgressEvent
+  /** v3 additive: pty output/exit for the integrated terminal (daemon-side
+   * host, used by remote runtimes; the LOCAL terminal is main-hosted). */
+  'terminal.data': TerminalDataEvent
+  'terminal.exit': TerminalExitEvent
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -272,6 +281,14 @@ export interface DaemonMethodMap {
   'git.changedFiles': { params: { projectPath: string }; result: GitStatusResult }
   /** v3 additive: unified diff of one changed path (panel drill-down). */
   'git.fileDiff': { params: { projectPath: string; path: string }; result: GitFileDiff }
+
+  // terminal (v3 additive): daemon-side pty host for REMOTE runtimes — the
+  // local terminal stays client-local in Electron main. node-pty is loaded
+  // lazily; a daemon without it answers 'err.terminal.unavailable'.
+  'terminal.attach': { params: { projectPath: string }; result: TerminalAttachResult }
+  'terminal.input': { params: { projectPath: string; data: string }; result: null }
+  'terminal.resize': { params: { projectPath: string; cols: number; rows: number }; result: null }
+  'terminal.kill': { params: { projectPath: string }; result: null }
 
   // version-check (pi + extensions; cache path comes from --user-data)
   'version-check.result': { params: Record<string, never>; result: UpdateCheckResult | null }

@@ -11,6 +11,7 @@ import { ipcMain, type BrowserWindow } from 'electron'
 import { existsSync, statSync } from 'node:fs'
 import { spawn, type IPty } from 'node-pty'
 import { IPC } from '../../src/types'
+import type { DaemonConnection } from './daemon-client'
 
 interface TermEntry {
   pty: IPty
@@ -41,6 +42,16 @@ function assertUsableDir(projectPath: unknown): string {
   return projectPath
 }
 
+/** Syntax-only check, BEFORE routing: a remote project's path does not exist
+ * on THIS machine, so the existsSync assertUsableDir can only run once the
+ * call is known to be local. */
+function basicPath(rawPath: unknown): string {
+  if (typeof rawPath !== 'string' || !rawPath || rawPath.includes('\0')) {
+    throw new TypeError('projectPath must be a non-empty string')
+  }
+  return rawPath
+}
+
 function assertDimension(value: unknown, name: string): number {
   if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 500) {
     throw new TypeError(`${name} must be an integer in 1..500`)
@@ -48,10 +59,15 @@ function assertDimension(value: unknown, name: string): number {
   return value
 }
 
-export function registerTerminalHandlers(getWindow: () => BrowserWindow | null): void {
+export function registerTerminalHandlers(getWindow: () => BrowserWindow | null, remoteFor: (projectPath: string) => DaemonConnection | null): void {
   // Attach = create on first use, then idempotent re-attach (buffer replay).
+  // A project owned by a REMOTE runtime proxies to its daemon (daemon-side
+  // pty host, same method names); local projects use the host below.
   ipcMain.handle(IPC.TERMINAL_ATTACH, (_e, rawPath: unknown) => {
-    const projectPath = assertUsableDir(rawPath)
+    const projectPath = basicPath(rawPath)
+    const remote = remoteFor(projectPath)
+    if (remote) return remote.call('terminal.attach', { projectPath })
+    assertUsableDir(projectPath)
     const existing = terminals.get(projectPath)
     if (existing) return { buffer: existing.buffer }
     const shell = process.env.SHELL?.trim() || '/bin/zsh'
@@ -76,18 +92,29 @@ export function registerTerminalHandlers(getWindow: () => BrowserWindow | null):
   })
 
   ipcMain.handle(IPC.TERMINAL_INPUT, (_e, rawPath: unknown, data: unknown) => {
-    const projectPath = assertUsableDir(rawPath)
+    const projectPath = basicPath(rawPath)
     if (typeof data !== 'string' || data.length > 8192) throw new TypeError('data must be a string (max 8KB)')
+    const remote = remoteFor(projectPath)
+    if (remote) return remote.call('terminal.input', { projectPath, data })
+    assertUsableDir(projectPath)
     terminals.get(projectPath)?.pty.write(data)
   })
 
   ipcMain.handle(IPC.TERMINAL_RESIZE, (_e, rawPath: unknown, cols: unknown, rows: unknown) => {
-    const projectPath = assertUsableDir(rawPath)
+    const projectPath = basicPath(rawPath)
+    const remote = remoteFor(projectPath)
+    if (remote) {
+      return remote.call('terminal.resize', { projectPath, cols: assertDimension(cols, 'cols'), rows: assertDimension(rows, 'rows') })
+    }
+    assertUsableDir(projectPath)
     terminals.get(projectPath)?.pty.resize(assertDimension(cols, 'cols'), assertDimension(rows, 'rows'))
   })
 
   ipcMain.handle(IPC.TERMINAL_KILL, (_e, rawPath: unknown) => {
-    const projectPath = assertUsableDir(rawPath)
+    const projectPath = basicPath(rawPath)
+    const remote = remoteFor(projectPath)
+    if (remote) return remote.call('terminal.kill', { projectPath })
+    assertUsableDir(projectPath)
     const entry = terminals.get(projectPath)
     if (entry) {
       entry.pty.kill()

@@ -27,6 +27,7 @@
     "test:i18n": "node scripts/check-i18n-strings.mjs",
     "test:daemon": "node scripts/daemon-cli-test.mjs && node scripts/daemon-ws-test.mjs && node scripts/daemon-dial-test.mjs && node scripts/daemon-pairing-test.mjs",
     "daemon:package": "node scripts/package-daemon.mjs",
+    "publish:daemon-github": "scripts/publish-daemon-github.sh",
     "postinstall": "node scripts/patch-dock-name.mjs && electron-rebuild -m node_modules/node-pty",
     "dist": "npm run build && electron-builder --mac --publish never",
     "dist:dir": "npm run build && electron-builder --mac --dir"

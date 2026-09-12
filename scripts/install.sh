@@ -11,7 +11,9 @@
 # manifest.json, registers the auto-start service via `pion-daemon install`
 # and prints the Host/Port/Token block to paste into Pion's settings.
 # PION_NO_SERVICE=1 skips service registration; PION_LISTEN / PION_LISTEN_WS
-# override the listen addresses (<host:port>).
+# override the listen addresses (<host:port>); PION_WITH_TERMINAL=1 also
+# npm-installs node-pty (native build toolchain required) to enable the
+# integrated terminal.
 set -eu
 
 DL_BASE="${PION_DL_BASE:-__DL_BASE__}"
@@ -74,10 +76,16 @@ for (const [name, f] of Object.entries(m.files)) {
 eval "$MANIFEST_VARS"
 [ -n "${PION_VERSION:-}" ] || die "manifest has no version"
 
+fetch_any() { # fetch_any <outfile> <url-preferred> <url-fallback>
+  # GitHub Releases assets are FLAT (no resources/ prefix); a static docroot
+  # serves the directory layout. Try the layout form first, then the flat one.
+  fetch "$2" "$1" || fetch "$3" "$1"
+}
+
 say "==> downloading pion-daemon $PION_VERSION"
 fetch "$DL_BASE/pion-daemon" "$TMP/pion-daemon"
-fetch "$DL_BASE/resources/kanban-bridge.ts" "$TMP/kanban-bridge.ts"
-fetch "$DL_BASE/resources/pion-commands.ts" "$TMP/pion-commands.ts"
+fetch_any "$TMP/kanban-bridge.ts" "$DL_BASE/resources/kanban-bridge.ts" "$DL_BASE/kanban-bridge.ts"
+fetch_any "$TMP/pion-commands.ts" "$DL_BASE/resources/pion-commands.ts" "$DL_BASE/pion-commands.ts"
 [ "$(hash_of "$TMP/pion-daemon")" = "${PION_SHA_PION_DAEMON:-}" ] || die "checksum mismatch: pion-daemon (delete and re-download manifest.json?)"
 [ "$(hash_of "$TMP/kanban-bridge.ts")" = "${PION_SHA_RESOURCES_KANBAN_BRIDGE_TS:-}" ] || die "checksum mismatch: kanban-bridge.ts"
 [ "$(hash_of "$TMP/pion-commands.ts")" = "${PION_SHA_RESOURCES_PION_COMMANDS_TS:-}" ] || die "checksum mismatch: pion-commands.ts"
@@ -95,6 +103,23 @@ case ":$PATH:" in
 esac
 
 command -v pi >/dev/null 2>&1 || say "    warn: 'pi' CLI not found in PATH — the daemon serves, but agent runtimes need pi installed on this machine"
+
+# Integrated terminal opt-in (daemon/terminal.ts lazily imports node-pty).
+# node-pty is native: needs a build toolchain on the remote, hence opt-in.
+# Installed into $PION_HOME/node_modules — node resolution from
+# $BIN_DIR/pion-daemon walks up to it.
+if [ "${PION_WITH_TERMINAL:-0}" = "1" ]; then
+  say "==> installing node-pty (integrated terminal; requires node-gyp toolchain)"
+  if command -v npm >/dev/null 2>&1; then
+    if (cd "$PION_HOME" && { [ -f package.json ] || npm init -y >/dev/null 2>&1; } && npm install --no-fund --no-audit node-pty); then
+      say "    node-pty installed — terminal enabled"
+    else
+      say "    warn: node-pty install failed — terminal will report err.terminal.unavailable"
+    fi
+  else
+    say "    warn: npm not found — skipping node-pty (terminal disabled)"
+  fi
+fi
 
 INSTALL_ARGS="--user-data $PION_HOME --resources $SHARE_DIR/resources"
 if [ -n "${PION_LISTEN:-}" ]; then INSTALL_ARGS="$INSTALL_ARGS --listen $PION_LISTEN"; fi

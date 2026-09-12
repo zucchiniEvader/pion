@@ -3,7 +3,7 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import type { ProjectRecord } from '@/types'
-import { useI18n } from '@/i18n'
+import { useI18n, useUserErrorMessage } from '@/i18n'
 import { onTerminalPrefsChange, readTerminalPrefs } from '@/lib/terminalPrefs'
 
 interface TerminalPanelProps {
@@ -16,8 +16,12 @@ interface TerminalPanelProps {
 // safe: main keeps the pty plus a scrollback tail, re-attach replays it.
 export function TerminalPanel({ project }: TerminalPanelProps) {
   const { t } = useI18n()
+  const ue = useUserErrorMessage()
   const hostRef = useRef<HTMLDivElement>(null)
   const [exited, setExited] = useState<number | null>(null)
+  // Attach failure (e.g. a remote daemon without node-pty): shown in place
+  // of the terminal instead of a silent dead pane.
+  const [error, setError] = useState<string | null>(null)
   // Bump to respawn after exit (effect re-runs, attach spawns a fresh pty).
   const [session, setSession] = useState(0)
 
@@ -52,7 +56,9 @@ export function TerminalPanel({ project }: TerminalPanelProps) {
         void window.pi.terminal.resize(project.path, term.cols, term.rows)
         term.focus()
       })
-      .catch(() => undefined)
+      .catch((e) => {
+        if (!disposed) setError(ue(e))
+      })
     const offData = window.pi.terminal.onData(project.path, (data) => term.write(data))
     const offExit = window.pi.terminal.onExit(project.path, (code) => {
       if (!disposed) setExited(code)
@@ -92,6 +98,20 @@ export function TerminalPanel({ project }: TerminalPanelProps) {
   return (
     <div className="relative min-h-0 flex-1">
       <div ref={hostRef} className="absolute inset-0 px-2 py-1.5" />
+      {error && (
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2.5 bg-panel/95 px-6">
+          <p className="text-center text-xs leading-relaxed text-bad">{error}</p>
+          <button
+            className="rounded-lg bg-accent px-2.5 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90"
+            onClick={() => {
+              setError(null)
+              setSession((s) => s + 1)
+            }}
+          >
+            {t('terminal.restart')}
+          </button>
+        </div>
+      )}
       {exited !== null && (
         <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2.5 bg-panel/95">
           <p className="text-xs text-ink2">{t('terminal.exited', { code: exited })}</p>

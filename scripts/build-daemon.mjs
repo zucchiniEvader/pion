@@ -15,7 +15,9 @@ await build({
   // ws's optional native accelerators are absent here — keep their require()
   // external so esbuild can bundle ws; at runtime ws's try/catch falls back
   // to the pure-JS path, which is exactly what we want in a shipped bundle.
-  external: ['bufferutil', 'utf-8-validate'],
+  // node-pty is native and lazily imported (daemon/terminal.ts): it can only
+  // resolve when installed beside the bundle (remote install opt-in).
+  external: ['bufferutil', 'utf-8-validate', 'node-pty'],
   outfile: 'out/daemon/index.cjs',
   logLevel: 'info',
 })

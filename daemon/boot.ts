@@ -19,6 +19,7 @@ import { registerGitMethods } from './git'
 import { registerVersionCheckMethods, stopPiUpdate } from './version-check'
 import { registerSettingsMethods } from './settings'
 import { registerCronMethods } from './cron'
+import { registerTerminalMethods, killAllTerminals } from './terminal'
 
 export const DAEMON_VERSION = '0.1.0'
 // stop() rungs are SIGTERM(2s)+SIGKILL(1.5s) per pi child; parallel across
@@ -115,6 +116,7 @@ function shutdown(reason: string, userData?: string): void {
   // A running `pi update` child is not a session runtime — stop it first so
   // the agent ladder below only has session runtimes left to drain.
   stopPiUpdate()
+  killAllTerminals()
   void shutdownAgent()
     .then(() => shutdownKanban())
     .catch(() => undefined)
@@ -150,6 +152,7 @@ export async function runDaemon(opts: BootOptions): Promise<void> {
   registerVersionCheckMethods(server, userData)
   registerSettingsMethods(server)
   registerCronMethods(server, userData)
+  registerTerminalMethods(server)
   setProjectRemovalHook((id) => stopKanbanStore(id))
   // v2: daemon.shutdown replies ok, then triggers the same graceful ladder.
   server.setShutdownHook(() => shutdown('daemon.shutdown', userData))
