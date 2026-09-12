@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowUpCircle,
   Box,
   AtSign,
   CircleCheck,
@@ -37,6 +36,7 @@ import type {
   SettingsQrInfo,
   SettingsRuntime,
   SettingsStatus,
+  CommunityPackage,
   UpdateCheckResult,
   UpdateProgressEvent,
 } from '@/types'
@@ -48,7 +48,7 @@ import { AppLogo } from '@/components/AppLogo'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 
-export type SettingsSection = 'general' | 'providers' | 'runtimes' | 'updates' | 'about'
+export type SettingsSection = 'general' | 'providers' | 'runtimes' | 'plugins' | 'about'
 
 /** Update-check slice of useUpdateCheck, owned by App (single subscriber —
  * preload dispatches each push channel to the latest subscriber only). */
@@ -83,7 +83,9 @@ const DEFAULT_DAEMON_DL_BASE = 'https://github.com/zucchiniEvader/pion/releases/
 // Settings dialog (docs/settings-design.md): a left-nav shell with five
 // sections. General = language + appearance; Providers = read-only view of
 // the local pi's models.json; Runtimes = the original runtime management;
-// Updates = pi + extensions + the GUI app itself; About = versions/links.
+// Updates was redesigned as the Plugins page: installed pi + extensions
+// with upgrade affordances, plus the community gallery with in-app install.
+// The GUI app's own self-update lives in About.
 export function SettingsDialog({ meta, runtimes, onRefresh, initialSection, update, onDefaultModelChanged, onClose }: SettingsDialogProps) {
   const { t } = useI18n()
   const [section, setSection] = useState<SettingsSection>(initialSection)
@@ -101,7 +103,7 @@ export function SettingsDialog({ meta, runtimes, onRefresh, initialSection, upda
     { id: 'general', label: t('settings.nav.general'), icon: SlidersHorizontal },
     { id: 'providers', label: t('settings.nav.providers'), icon: Box },
     { id: 'runtimes', label: t('settings.nav.runtimes'), icon: Server },
-    { id: 'updates', label: t('settings.nav.updates'), icon: ArrowUpCircle },
+    { id: 'plugins', label: t('settings.nav.plugins'), icon: Plug },
     { id: 'about', label: t('settings.nav.about'), icon: Info },
   ]
 
@@ -146,7 +148,7 @@ export function SettingsDialog({ meta, runtimes, onRefresh, initialSection, upda
             {section === 'general' && <GeneralSection />}
             {section === 'providers' && <ProvidersSection onDefaultModelChanged={onDefaultModelChanged} />}
             {section === 'runtimes' && <RuntimesSection runtimes={runtimes} onRefresh={onRefresh} />}
-            {section === 'updates' && <UpdatesSection meta={meta} update={update} />}
+            {section === 'plugins' && <PluginsSection update={update} />}
             {section === 'about' && <AboutSection meta={meta} />}
           </div>
         </div>
@@ -1254,10 +1256,10 @@ function QrMatrix({ text, size }: { text: string; size: number }) {
   )
 }
 
-// ── Updates: GUI app + pi + extensions ─────────────────────────────────────
+// ── Plugins: installed (pi + extensions) + community gallery ──────────────
 
-// Minimal version compare for the GUI row (x[.y[.z]], prerelease ignored) —
-// same rule as daemon/version-check.ts, but renderer-side and standalone.
+// Minimal version compare (x[.y[.z]], prerelease ignored) — same rule as
+// daemon/version-check.ts, but renderer-side and standalone.
 function isNewer(a: string, b: string): boolean {
   const pa = a.replace(/^v/, '').split('.').map(Number)
   const pb = b.replace(/^v/, '').split('.').map(Number)
@@ -1267,23 +1269,15 @@ function isNewer(a: string, b: string): boolean {
   return false
 }
 
-function UpdatesSection({ meta, update }: { meta: AppMeta | null; update: SettingsUpdateApi }) {
+function PluginsSection({ update }: { update: SettingsUpdateApi }) {
   const { t } = useI18n()
   const { result, recheck, progress, runUpdate } = update
-  const [gui, setGui] = useState<GuiUpdateInfo | null>(null)
   const [busy, setBusy] = useState(false)
   const [copied, setCopied] = useState(false)
   const [log, setLog] = useState<string[]>([])
   const logRef = useRef<HTMLDivElement | null>(null)
-  const [appUp, setAppUp] = useState<AppUpdateStatus | null>(null)
   const updating = progress?.running === true
   const finished = progress?.done === true
-
-  useEffect(() => {
-    void window.pi.app.guiUpdate().then(setGui).catch(() => undefined)
-    void window.pi.app.appUpdate.status().then(setAppUp).catch(() => undefined)
-    return window.pi.app.appUpdate.onStatus(setAppUp)
-  }, [])
 
   useEffect(() => {
     if (progress?.line) setLog((prev) => [...prev.slice(-300), progress.line!])
@@ -1296,7 +1290,6 @@ function UpdatesSection({ meta, update }: { meta: AppMeta | null; update: Settin
     setBusy(true)
     try {
       await recheck()
-      await window.pi.app.guiUpdate().then(setGui).catch(() => undefined)
     } finally {
       setBusy(false)
     }
@@ -1311,13 +1304,12 @@ function UpdatesSection({ meta, update }: { meta: AppMeta | null; update: Settin
     setTimeout(() => setCopied(false), 1200)
   }
 
-  const guiOutdated = gui?.latest != null && gui.version != null && isNewer(gui.latest, gui.version)
   const piOutdated = (result?.outdatedCount ?? 0) > 0
 
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink2">{t('settings.nav.updates')}</h3>
+        <h3 className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink2">{t('settings.plugins.installed')}</h3>
         <button
           className="grid size-6 place-items-center rounded-md text-ink2 transition-colors hover:bg-fill-hover hover:text-ink"
           title={t('settings.updates.recheck')}
@@ -1328,11 +1320,285 @@ function UpdatesSection({ meta, update }: { meta: AppMeta | null; update: Settin
       </div>
 
       <ul className="flex flex-col gap-1">
-        {/* GUI app row: current version; latest appears once a release feed
-            (package.json repository) is configured. In-app self-update:
-            check → download → restart-to-install (electron-updater). */}
-        <li className="flex items-center gap-2 rounded-lg border-[0.5px] border-line bg-panel px-2.5 py-2 text-xs">
-          <span className="shrink-0 rounded bg-tint-accent px-1 py-px text-[10px] font-medium text-accent">GUI</span>
+        {/* pi + extension rows from the daemon version check. */}
+        {(result?.entries ?? []).map((entry) => (
+          <li key={`${entry.kind}:${entry.name}`} className="flex items-center gap-2 rounded-lg border-[0.5px] border-line bg-panel px-2.5 py-2 text-xs">
+            <span className={cn('shrink-0 rounded px-1 py-px text-[10px] font-medium', entry.kind === 'pi' ? 'bg-tint-accent text-accent' : 'bg-fill-hover text-ink2')}>
+              {entry.kind === 'pi' ? 'PI' : t('settings.updates.kindExtension')}
+            </span>
+            <span className="min-w-0 truncate font-medium text-ink" title={entry.name}>
+              {entry.name}
+            </span>
+            {entry.outdated && <span className="shrink-0 rounded bg-tint-warn px-1.5 py-px text-[10px] font-medium text-warn">{t('settings.updates.outdated')}</span>}
+            <span className="ml-auto shrink-0 tabular-nums text-ink2">
+              {entry.installed ?? '?'} → {entry.latest ?? '?'}
+            </span>
+            <button
+              className="grid size-5 shrink-0 place-items-center rounded text-ink2 transition-colors hover:bg-fill-hover hover:text-ink"
+              title={t('settings.updates.openNpm')}
+              onClick={() => void window.pi.app.openExternal(`https://www.npmjs.com/package/${entry.name}`)}
+            >
+              <ExternalLink size={11} />
+            </button>
+          </li>
+        ))}
+        {!result && <li className="px-1 py-2 text-xs text-ink2">{t('settings.updates.checking')}</li>}
+      </ul>
+
+      {!piOutdated && result && (
+        <p className="text-xs text-ink2">
+          {t('settings.updates.upToDate', {
+            time: result.checkedAt ? new Date(result.checkedAt).toLocaleString() : '—',
+          })}
+        </p>
+      )}
+
+      {(log.length > 0 || (finished && progress?.error)) && (
+        <div ref={logRef} className="max-h-32 overflow-y-auto rounded-md bg-canvas px-2 py-1.5 font-mono text-[10px] leading-4 text-ink2">
+          {log.map((line, i) => (
+            <div key={i} className="break-all whitespace-pre-wrap">
+              {line}
+            </div>
+          ))}
+          {finished && progress?.error && <div className="break-all whitespace-pre-wrap text-bad">{progress.error}</div>}
+          {finished && !progress?.error && <div className={cn(progress?.code === 0 ? 'text-ok' : 'text-bad')}>{progress?.code === 0 ? t('settings.updates.done') : t('settings.updates.failed', { code: progress?.code ?? '' })}</div>}
+        </div>
+      )}
+
+      <div className="flex items-center gap-1.5">
+        <button
+          className="flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-[11px] font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
+          disabled={updating || !piOutdated}
+          title={t('settings.updates.allTitle')}
+          onClick={() => void startUpdate()}
+        >
+          <RefreshCw size={11} className={cn(updating && 'animate-spin')} />
+          {updating ? t('settings.updates.updating') : t('settings.updates.all')}
+        </button>
+        {updating && <span className="text-[11px] text-ink2">{t('settings.updates.upgradingHint')}</span>}
+        <button
+          className="ml-auto grid size-6 shrink-0 place-items-center rounded-md text-ink2 transition-colors hover:bg-fill-hover hover:text-ink"
+          title={t('settings.updates.copyCommand')}
+          onClick={copyCommand}
+        >
+          {copied ? <CircleCheck size={12} className="text-ok" /> : <Copy size={12} />}
+        </button>
+      </div>
+
+      <CommunityGallery update={update} />
+    </div>
+  )
+}
+
+// Community gallery: every npm package tagged `pi-package` (pi.dev/packages
+// is built from the same tag). Click a row to select it; the expanded panel
+// installs in-app via `pi install npm:<name> --no-approve`.
+function CommunityGallery({ update }: { update: SettingsUpdateApi }) {
+  const { t } = useI18n()
+  const [query, setQuery] = useState('')
+  const [packages, setPackages] = useState<CommunityPackage[] | null>(null)
+  const [loadError, setLoadError] = useState(false)
+  const [selected, setSelected] = useState<string | null>(null)
+  const [progress, setProgress] = useState<UpdateProgressEvent | null>(null)
+  const [log, setLog] = useState<string[]>([])
+  const logRef = useRef<HTMLDivElement | null>(null)
+  const installing = progress?.running === true
+  const finished = progress?.done === true
+
+  // Debounced server-side search; empty query lists the top by relevance.
+  useEffect(() => {
+    let cancelled = false
+    const handle = setTimeout(
+      () => {
+        void window.pi.plugins
+          .community(query.trim())
+          .then((pkgs) => {
+            if (!cancelled) {
+              setPackages(pkgs)
+              setLoadError(false)
+            }
+          })
+          .catch(() => {
+            if (!cancelled) {
+              setPackages([])
+              setLoadError(true)
+            }
+          })
+      },
+      query ? 300 : 0,
+    )
+    return () => {
+      cancelled = true
+      clearTimeout(handle)
+    }
+  }, [query])
+
+  useEffect(
+    () =>
+      window.pi.plugins.onProgress((e) => {
+        setProgress(e)
+        if (e.line) setLog((prev) => [...prev.slice(-300), e.line!])
+        // A successful install changed settings.json → refresh installed list.
+        if (e.done && e.code === 0) void update.recheck()
+      }),
+    [update],
+  )
+  useEffect(() => {
+    logRef.current?.scrollTo({ top: logRef.current.scrollHeight })
+  }, [log])
+
+  const installedNames = new Set((update.result?.entries ?? []).map((e) => e.name))
+
+  const startInstall = async (name: string) => {
+    setLog([])
+    const res = await window.pi.plugins.install(name)
+    if (!res.started && res.error) setLog([res.error])
+  }
+
+  return (
+    <>
+      <div className="mt-3 flex items-center justify-between border-t border-line pt-3">
+        <h3 className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink2">{t('settings.plugins.community')}</h3>
+        <button
+          className="grid size-6 place-items-center rounded-md text-ink2 transition-colors hover:bg-fill-hover hover:text-ink"
+          title={t('settings.plugins.viewGallery')}
+          onClick={() => void window.pi.app.openExternal('https://pi.dev/packages')}
+        >
+          <ExternalLink size={12} />
+        </button>
+      </div>
+      <Input value={query} onValueChange={setQuery} placeholder={t('settings.plugins.search')} />
+      <p className="text-[10px] leading-relaxed text-ink2">{t('settings.plugins.securityHint')}</p>
+
+      <ul className="flex flex-col gap-1">
+        {(packages ?? []).map((pkg) => {
+          const isInstalled = installedNames.has(pkg.name)
+          const open = selected === pkg.name
+          return (
+            <li key={pkg.name} className="overflow-hidden rounded-lg border-[0.5px] border-line bg-panel text-xs">
+              <button className="flex w-full items-center gap-2 px-2.5 py-2 text-left" onClick={() => setSelected(open ? null : pkg.name)}>
+                <span className="min-w-0 truncate font-medium text-ink" title={pkg.name}>
+                  {pkg.name}
+                </span>
+                {isInstalled && <span className="shrink-0 rounded bg-tint-ok px-1.5 py-px text-[10px] font-medium text-ok">{t('settings.plugins.installedBadge')}</span>}
+                <span className="ml-auto shrink-0 tabular-nums text-ink2">{pkg.version ?? ''}</span>
+                <ChevronDown size={12} className={cn('shrink-0 text-ink2 transition-transform', open && 'rotate-180')} />
+              </button>
+              {open && (
+                <div className="flex flex-col gap-2 border-t border-line px-2.5 py-2">
+                  {pkg.description && <p className="leading-relaxed text-ink2">{pkg.description}</p>}
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      className="rounded-md bg-accent px-2 py-1 text-[10px] font-medium text-white transition-colors hover:bg-accent-hover disabled:pointer-events-none disabled:opacity-40"
+                      disabled={installing || isInstalled}
+                      onClick={() => void startInstall(pkg.name)}
+                    >
+                      {installing ? t('settings.plugins.installing') : isInstalled ? t('settings.plugins.installedBadge') : t('settings.plugins.install')}
+                    </button>
+                    {pkg.publisher && <span className="text-[10px] text-ink2">{pkg.publisher}</span>}
+                    <button
+                      className="ml-auto grid size-5 shrink-0 place-items-center rounded text-ink2 transition-colors hover:bg-fill-hover hover:text-ink"
+                      title={t('settings.updates.openNpm')}
+                      onClick={() => void window.pi.app.openExternal(`https://www.npmjs.com/package/${pkg.name}`)}
+                    >
+                      <ExternalLink size={11} />
+                    </button>
+                    <button
+                      className="grid size-5 shrink-0 place-items-center rounded text-ink2 transition-colors hover:bg-fill-hover hover:text-ink"
+                      title={t('settings.plugins.viewGallery')}
+                      onClick={() => void window.pi.app.openExternal(`https://pi.dev/packages/${pkg.name}`)}
+                    >
+                      <Globe size={11} />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </li>
+          )
+        })}
+        {packages === null && !loadError && <li className="px-1 py-2 text-xs text-ink2">{t('settings.plugins.loading')}</li>}
+        {loadError && <li className="px-1 py-2 text-xs text-bad">{t('settings.plugins.loadFailed')}</li>}
+        {packages?.length === 0 && !loadError && <li className="px-1 py-2 text-xs text-ink2">{t('settings.plugins.empty')}</li>}
+      </ul>
+
+      {(log.length > 0 || (finished && progress?.error)) && (
+        <div ref={logRef} className="max-h-32 overflow-y-auto rounded-md bg-canvas px-2 py-1.5 font-mono text-[10px] leading-4 text-ink2">
+          {log.map((line, i) => (
+            <div key={i} className="break-all whitespace-pre-wrap">
+              {line}
+            </div>
+          ))}
+          {finished && progress?.error && <div className="break-all whitespace-pre-wrap text-bad">{progress.error}</div>}
+          {finished && !progress?.error && (
+            <div className={cn(progress?.code === 0 ? 'text-ok' : 'text-bad')}>{progress?.code === 0 ? t('settings.plugins.done') : t('settings.plugins.failed', { code: progress?.code ?? '' })}</div>
+          )}
+        </div>
+      )}
+    </>
+  )
+}
+
+// ── About: versions + links ────────────────────────────────────────────────
+
+// Outbound links for the About pane. PROJECT_HOME_URL is the site the Pages
+// workflow deploys; package.json `homepage` mirrors it.
+const PROJECT_HOME_URL = 'https://zucchinievader.github.io/pion/'
+const PROJECT_REPO_URL = 'https://github.com/zucchiniEvader/pion'
+const AUTHOR_TWITTER_URL = 'https://x.com/zucchiniEvader'
+
+function AboutSection({ meta }: { meta: AppMeta | null }) {
+  const { t } = useI18n()
+  const platform = meta?.platform === 'darwin' ? 'macOS' : meta?.platform === 'win32' ? 'Windows' : meta?.platform === 'linux' ? 'Linux' : meta?.platform ?? '—'
+
+  // GUI self-update (moved from the old Updates page): check → download →
+  // restart-to-install via electron-updater; latest appears once a release
+  // feed (package.json repository) is configured.
+  const [gui, setGui] = useState<GuiUpdateInfo | null>(null)
+  const [appUp, setAppUp] = useState<AppUpdateStatus | null>(null)
+
+  useEffect(() => {
+    void window.pi.app.guiUpdate().then(setGui).catch(() => undefined)
+    void window.pi.app.appUpdate.status().then(setAppUp).catch(() => undefined)
+    return window.pi.app.appUpdate.onStatus(setAppUp)
+  }, [])
+
+  const guiOutdated = gui?.latest != null && gui.version != null && isNewer(gui.latest, gui.version)
+
+  return (
+    <div data-settings-about className="@container mx-auto flex min-h-full max-w-[560px] flex-col">
+      <section className="flex flex-col items-center pb-8 pt-5 text-center">
+        <AppLogo className="size-[72px] rounded-[18px]" />
+        <h3 className="mt-4 text-[30px] font-semibold leading-tight tracking-tight text-ink">Pion</h3>
+        <p className="mt-2 text-[13px] leading-relaxed text-ink2">{t('settings.about.tagline')}</p>
+        <span className="mt-3 rounded-full border-[0.5px] border-line bg-panel px-2.5 py-1 font-mono text-[10px] leading-none text-ink2">
+          {meta ? `v${meta.version}` : '—'}
+        </span>
+      </section>
+
+      <section aria-labelledby="about-environment">
+        <h4 id="about-environment" className="mb-2.5 text-[11px] font-medium text-ink2">{t('settings.about.environment')}</h4>
+        <dl className="overflow-hidden rounded-xl border-[0.5px] border-line bg-panel text-xs">
+          <div className="flex items-center justify-between gap-4 border-b border-line px-4 py-3.5">
+            <dt className="text-ink2">{t('settings.about.platform')}</dt>
+            <dd className="font-medium text-ink">{platform}</dd>
+          </div>
+          <div className="px-4 py-3.5">
+            <div className="flex items-center justify-between gap-4">
+              <dt className="shrink-0 text-ink2">{t('settings.about.pi')}</dt>
+              <dd className={cn('text-right font-medium', meta && !meta.piPath ? 'text-bad' : 'text-ink')}>
+                {!meta ? '—' : meta.piPath ? (meta.piVersion ? `v${meta.piVersion}` : '—') : t('settings.about.piMissing')}
+              </dd>
+            </div>
+            {meta?.piPath && (
+              <dd className="mt-2 break-all font-mono text-[10px] leading-relaxed text-ink2">{meta.piPath}</dd>
+            )}
+          </div>
+        </dl>
+      </section>
+
+      <section aria-labelledby="about-app-update" className="mt-6">
+        <h4 id="about-app-update" className="mb-2.5 text-[11px] font-medium text-ink2">{t('settings.about.app')}</h4>
+        <div className="flex items-center gap-2 rounded-xl border-[0.5px] border-line bg-panel px-4 py-3.5 text-xs">
           <span className="min-w-0 truncate font-medium text-ink">Pion</span>
           <span className="ml-auto shrink-0 tabular-nums text-ink2">
             {gui ? (gui.latest && guiOutdated ? `${gui.version} → ${gui.latest}` : t('settings.updates.currentVersion', { version: gui.version })) : '—'}
@@ -1377,117 +1643,7 @@ function UpdatesSection({ meta, update }: { meta: AppMeta | null; update: Settin
               <ExternalLink size={11} />
             </button>
           )}
-        </li>
-        {/* pi + extension rows from the daemon version check. */}
-        {(result?.entries ?? []).map((entry) => (
-          <li key={`${entry.kind}:${entry.name}`} className="flex items-center gap-2 rounded-lg border-[0.5px] border-line bg-panel px-2.5 py-2 text-xs">
-            <span className={cn('shrink-0 rounded px-1 py-px text-[10px] font-medium', entry.kind === 'pi' ? 'bg-tint-accent text-accent' : 'bg-fill-hover text-ink2')}>
-              {entry.kind === 'pi' ? 'PI' : t('settings.updates.kindExtension')}
-            </span>
-            <span className="min-w-0 truncate font-medium text-ink" title={entry.name}>
-              {entry.name}
-            </span>
-            {entry.outdated && <span className="shrink-0 rounded bg-tint-warn px-1.5 py-px text-[10px] font-medium text-warn">{t('settings.updates.outdated')}</span>}
-            <span className="ml-auto shrink-0 tabular-nums text-ink2">
-              {entry.installed ?? '?'} → {entry.latest ?? '?'}
-            </span>
-            <button
-              className="grid size-5 shrink-0 place-items-center rounded text-ink2 transition-colors hover:bg-fill-hover hover:text-ink"
-              title={t('settings.updates.openNpm')}
-              onClick={() => void window.pi.app.openExternal(`https://www.npmjs.com/package/${entry.name}`)}
-            >
-              <ExternalLink size={11} />
-            </button>
-          </li>
-        ))}
-        {!result && !gui && <li className="px-1 py-2 text-xs text-ink2">{t('settings.updates.checking')}</li>}
-      </ul>
-
-      {!piOutdated && !guiOutdated && result && (
-        <p className="text-xs text-ink2">
-          {t('settings.updates.upToDate', {
-            time: result.checkedAt ? new Date(result.checkedAt).toLocaleString() : '—',
-          })}
-        </p>
-      )}
-
-      {(log.length > 0 || (finished && progress?.error)) && (
-        <div ref={logRef} className="max-h-32 overflow-y-auto rounded-md bg-canvas px-2 py-1.5 font-mono text-[10px] leading-4 text-ink2">
-          {log.map((line, i) => (
-            <div key={i} className="break-all whitespace-pre-wrap">
-              {line}
-            </div>
-          ))}
-          {finished && progress?.error && <div className="break-all whitespace-pre-wrap text-bad">{progress.error}</div>}
-          {finished && !progress?.error && <div className={cn(progress?.code === 0 ? 'text-ok' : 'text-bad')}>{progress?.code === 0 ? t('settings.updates.done') : t('settings.updates.failed', { code: progress?.code ?? '' })}</div>}
         </div>
-      )}
-
-      <div className="flex items-center gap-1.5">
-        <button
-          className="flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-[11px] font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
-          disabled={updating || !piOutdated}
-          title={t('settings.updates.allTitle')}
-          onClick={() => void startUpdate()}
-        >
-          <RefreshCw size={11} className={cn(updating && 'animate-spin')} />
-          {updating ? t('settings.updates.updating') : t('settings.updates.all')}
-        </button>
-        {updating && <span className="text-[11px] text-ink2">{t('settings.updates.upgradingHint')}</span>}
-        <button
-          className="ml-auto grid size-6 shrink-0 place-items-center rounded-md text-ink2 transition-colors hover:bg-fill-hover hover:text-ink"
-          title={t('settings.updates.copyCommand')}
-          onClick={copyCommand}
-        >
-          {copied ? <CircleCheck size={12} className="text-ok" /> : <Copy size={12} />}
-        </button>
-      </div>
-    </div>
-  )
-}
-
-// ── About: versions + links ────────────────────────────────────────────────
-
-// Outbound links for the About pane. PROJECT_HOME_URL is the site the Pages
-// workflow deploys; package.json `homepage` mirrors it.
-const PROJECT_HOME_URL = 'https://zucchinievader.github.io/pion/'
-const PROJECT_REPO_URL = 'https://github.com/zucchiniEvader/pion'
-const AUTHOR_TWITTER_URL = 'https://x.com/zucchiniEvader'
-
-function AboutSection({ meta }: { meta: AppMeta | null }) {
-  const { t } = useI18n()
-  const platform = meta?.platform === 'darwin' ? 'macOS' : meta?.platform === 'win32' ? 'Windows' : meta?.platform === 'linux' ? 'Linux' : meta?.platform ?? '—'
-
-  return (
-    <div data-settings-about className="@container mx-auto flex min-h-full max-w-[560px] flex-col">
-      <section className="flex flex-col items-center pb-8 pt-5 text-center">
-        <AppLogo className="size-[72px] rounded-[18px]" />
-        <h3 className="mt-4 text-[30px] font-semibold leading-tight tracking-tight text-ink">Pion</h3>
-        <p className="mt-2 text-[13px] leading-relaxed text-ink2">{t('settings.about.tagline')}</p>
-        <span className="mt-3 rounded-full border-[0.5px] border-line bg-panel px-2.5 py-1 font-mono text-[10px] leading-none text-ink2">
-          {meta ? `v${meta.version}` : '—'}
-        </span>
-      </section>
-
-      <section aria-labelledby="about-environment">
-        <h4 id="about-environment" className="mb-2.5 text-[11px] font-medium text-ink2">{t('settings.about.environment')}</h4>
-        <dl className="overflow-hidden rounded-xl border-[0.5px] border-line bg-panel text-xs">
-          <div className="flex items-center justify-between gap-4 border-b border-line px-4 py-3.5">
-            <dt className="text-ink2">{t('settings.about.platform')}</dt>
-            <dd className="font-medium text-ink">{platform}</dd>
-          </div>
-          <div className="px-4 py-3.5">
-            <div className="flex items-center justify-between gap-4">
-              <dt className="shrink-0 text-ink2">{t('settings.about.pi')}</dt>
-              <dd className={cn('text-right font-medium', meta && !meta.piPath ? 'text-bad' : 'text-ink')}>
-                {!meta ? '—' : meta.piPath ? (meta.piVersion ? `v${meta.piVersion}` : '—') : t('settings.about.piMissing')}
-              </dd>
-            </div>
-            {meta?.piPath && (
-              <dd className="mt-2 break-all font-mono text-[10px] leading-relaxed text-ink2">{meta.piPath}</dd>
-            )}
-          </div>
-        </dl>
       </section>
 
       <section aria-labelledby="about-links" className="mt-6">

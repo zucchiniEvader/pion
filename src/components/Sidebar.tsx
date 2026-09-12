@@ -48,10 +48,10 @@ interface SidebarProps {
   /** Opens the remote add-project dialog for this runtime. */
   onAddFromRuntime: (runtime: SettingsRuntime) => void
   /** Opens the settings dialog, optionally deep-linking to a section
-   * (the update badge deep-links to 'updates'). */
-  onOpenSettings: (section?: 'updates') => void
+   * (the update badge deep-links to the Plugins page). */
+  onOpenSettings: (section?: 'plugins') => void
   /** Update-check result owned by App (single subscriber); the footer
-   * badge renders from it, the full surface lives in Settings > Updates. */
+   * badge renders from it, the full surface lives in Settings > Plugins. */
   updateResult: UpdateCheckResult | null
   onOpenProject: (project: ProjectRecord) => void
   onOpenSession: (session: SessionRecord) => void
@@ -535,7 +535,7 @@ export function Sidebar({
           <button
             className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md bg-tint-warn px-1.5 py-0.5 text-[10px] font-medium text-warn transition-colors hover:bg-warn/20"
             title={t('sidebar.updateAvailableTitle')}
-            onClick={() => onOpenSettings('updates')}
+            onClick={() => onOpenSettings('plugins')}
           >
             <ArrowUpCircle size={11} strokeWidth={1.75} />
             {t('sidebar.updatesCount', { count: updateCheck.outdatedCount, s: updateCheck.outdatedCount === 1 ? '' : 's' })}

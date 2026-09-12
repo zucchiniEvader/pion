@@ -35,6 +35,7 @@ import type {
   UpdateCheckResult,
   AppUpdateStatus,
   UpdateProgressEvent,
+  CommunityPackage,
   ThemeSetting,
   GuiUpdateInfo,
   ProvidersLocalResult,
@@ -422,6 +423,11 @@ const api: PiGuiApi = {
     onChanged: (cb) => subscribe<UpdateCheckResult>(IPC.VERSION_CHECK_RESULT, cb),
     run: () => invoke<{ started: boolean; error?: string }>(IPC.VERSION_CHECK_UPDATE),
     onProgress: (cb) => subscribe<UpdateProgressEvent>(IPC.VERSION_CHECK_PROGRESS, cb),
+  },
+  plugins: {
+    community: (query?: string) => invoke<CommunityPackage[]>(IPC.PLUGINS_COMMUNITY, query),
+    install: (name: string) => invoke<{ started: boolean; error?: string }>(IPC.PLUGINS_INSTALL, name),
+    onProgress: (cb) => subscribe<UpdateProgressEvent>(IPC.PLUGINS_PROGRESS, cb),
   },
 }
 

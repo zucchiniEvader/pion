@@ -91,6 +91,15 @@ export const IPC = {
   VERSION_CHECK_UPDATE: 'version-check:update',
   /** main→renderer push: streamed update output + lifecycle. */
   VERSION_CHECK_PROGRESS: 'version-check:progress',
+  // community plugin gallery + install (settings Plugins page; client-local:
+  // the npm registry fetch runs in main like the GUI latest-release probe,
+  // and `pi install` is a machine-level action like the pi bootstrap — both
+  // stay off the frozen daemon protocol).
+  PLUGINS_COMMUNITY: 'plugins:community',
+  /** Starts `pi install npm:<name> --no-approve` (explicit user action). */
+  PLUGINS_INSTALL: 'plugins:install',
+  /** main→renderer push: streamed install output + lifecycle. */
+  PLUGINS_PROGRESS: 'plugins:progress',
   // GUI self-update (electron-updater + GitHub Releases, settings Updates)
   APP_UPDATE_CHECK: 'app:update-check',
   APP_UPDATE_DOWNLOAD: 'app:update-download',
@@ -723,6 +732,18 @@ export interface UpdateProgressEvent {
   error?: string
 }
 
+/** One entry of the community plugin gallery (pi.dev/packages shows every
+ * npm package tagged `pi-package`; we query the same npm search API). */
+export interface CommunityPackage {
+  name: string
+  version: string | null
+  description: string | null
+  /** npm publisher username. */
+  publisher: string | null
+  /** ISO date of the last publish. */
+  date: string | null
+}
+
 // ──────────────────────────────────────────────────────────────────────────
 // Preload API surface (context-isolated)
 // ──────────────────────────────────────────────────────────────────────────
@@ -890,6 +911,17 @@ export interface PiGuiApi {
      * user action only; resolves whether the process was started. */
     run: () => Promise<{ started: boolean; error?: string }>
     /** Streamed update output; a final event has done: true. */
+    onProgress: (cb: (e: UpdateProgressEvent) => void) => () => void
+  }
+  plugins: {
+    /** Community gallery (every npm package tagged `pi-package`, the same
+     * source pi.dev/packages uses). Empty query = top by relevance; a
+     * non-empty query searches server-side. Cached briefly in main. */
+    community: (query?: string) => Promise<CommunityPackage[]>
+    /** Runs `pi install npm:<name> --no-approve` in the main process.
+     * Explicit user action only; resolves whether the process was started. */
+    install: (name: string) => Promise<{ started: boolean; error?: string }>
+    /** Streamed install output; a final event has done: true. */
     onProgress: (cb: (e: UpdateProgressEvent) => void) => () => void
   }
 }

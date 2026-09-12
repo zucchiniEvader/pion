@@ -35,6 +35,7 @@ import { detectPi, safeChildEnvironment } from '../../daemon/pi-rpc'
 import { runPiInstall, stopPiInstall } from './pi-install'
 import { daemons } from './daemon-client'
 import { initUpdater } from './updater'
+import { initPlugins, stopPluginInstall } from './plugins'
 import type { DaemonConnection } from './daemon-client'
 
 let mainWindow: BrowserWindow | null = null
@@ -844,6 +845,7 @@ app.whenReady().then(async () => {
   }
   registerIpc()
   initUpdater()
+  initPlugins(sendToRenderer)
   // Daemon (goal.md v3 §7): every business handler forwards through it, so
   // boot awaits readiness (node-bundle spawn + hello_ok + ping — fast). On
   // failure boot still continues and every dependent call fails visibly
@@ -875,6 +877,7 @@ app.whenReady().then(async () => {
 // the other machine owns its own processes).
 app.on('before-quit', () => {
   stopPiInstall()
+  stopPluginInstall()
   killAllTerminals()
   void daemons.stopAll()
 })
