@@ -19,6 +19,7 @@ import {
   FolderOpen,
   LoaderCircle,
   MessageCirclePlus,
+  MessageCircleQuestion,
   MessageSquarePlus,
   Pencil,
   PanelLeftClose,
@@ -41,9 +42,10 @@ interface SidebarProps {
   trackedFilesByPath: Record<string, string[]>
   activeProjectPath: string | null
   activeSessionPath: string | null
-  /** Running/unread state per session file, so background runs still show a
-   * spinner and finished-but-unseen sessions show a badge. */
-  sessionStatusByFile: Record<string, { running: boolean; unread: boolean }>
+  /** Running/unread/waiting state per session file, so background runs still
+   * show a spinner, blocked-on-question runs a waiting badge, and
+   * finished-but-unseen sessions a dot. */
+  sessionStatusByFile: Record<string, { running: boolean; unread: boolean; waiting?: boolean }>
   onPickProject: () => void
   /** Opens the remote add-project dialog for this runtime. */
   onAddFromRuntime: (runtime: SettingsRuntime) => void
@@ -462,6 +464,7 @@ export function Sidebar({
                                 session={s}
                                 active={s.filePath === activeSessionPath}
                                 spinning={sessionStatusByFile[s.filePath]?.running}
+                                waiting={sessionStatusByFile[s.filePath]?.waiting}
                                 unread={sessionStatusByFile[s.filePath]?.unread && !sessionStatusByFile[s.filePath]?.running}
                                 onOpen={onOpenSession}
                                 onRename={onRenameSession}
@@ -502,6 +505,7 @@ export function Sidebar({
                                     muted
                                     active={s.filePath === activeSessionPath}
                                     spinning={sessionStatusByFile[s.filePath]?.running}
+                                    waiting={sessionStatusByFile[s.filePath]?.waiting}
                                     unread={sessionStatusByFile[s.filePath]?.unread && !sessionStatusByFile[s.filePath]?.running}
                                     onOpen={onOpenSession}
                                     onRename={onRenameSession}
@@ -563,6 +567,7 @@ const SessionRow = memo(function SessionRow({
   session,
   active,
   spinning,
+  waiting,
   unread,
   muted,
   onOpen,
@@ -573,6 +578,9 @@ const SessionRow = memo(function SessionRow({
   session: SessionRecord
   active: boolean
   spinning?: boolean
+  /** Blocked on an interactive extension question (ask-user-question, plan
+   * mode) — replaces the spinner so the user sees the run needs an answer. */
+  waiting?: boolean
   unread?: boolean
   /** Archived (non-app) session: slightly muted title. */
   muted?: boolean
@@ -632,7 +640,11 @@ const SessionRow = memo(function SessionRow({
             <span className="ml-auto flex shrink-0 items-center gap-1.5">
               {unread && <span className="size-1.5 rounded-full bg-accent" />}
               <span className="text-[11px] text-ink2">{relTime(session.updatedAt, lang)}</span>
-              {spinning && <LoaderCircle size={13} strokeWidth={1.75} className="animate-spin text-accent" />}
+              {waiting ? (
+                <MessageCircleQuestion size={13} strokeWidth={1.75} className="animate-pulse text-warn" aria-label={t('sidebar.waitingForInput')} />
+              ) : (
+                spinning && <LoaderCircle size={13} strokeWidth={1.75} className="animate-spin text-accent" />
+              )}
             </span>
           </button>
         </ContextMenu.Trigger>

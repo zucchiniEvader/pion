@@ -525,11 +525,13 @@ export default function App() {
   }
   // Per-session running/unread state keyed by session file, so the sidebar
   // can show a spinner on background runs and a badge on finished-but-unseen
-  // ones — not just the foreground session.
-  const sessionStatusByFile: Record<string, { running: boolean; unread: boolean }> = {}
+  // ones — not just the foreground session. `waiting` marks a run blocked on
+  // an interactive extension request (ask-user-question, plan mode) that
+  // only the user's answer can unblock.
+  const sessionStatusByFile: Record<string, { running: boolean; unread: boolean; waiting: boolean }> = {}
   for (const s of pool.sessions.values()) {
     const file = s.runtime?.sessionFile ?? s.lastStart?.sessionPath
-    if (file) sessionStatusByFile[file] = { running: s.status === 'running', unread: s.unread }
+    if (file) sessionStatusByFile[file] = { running: s.status === 'running', unread: s.unread, waiting: s.status === 'running' && s.interactive.length > 0 }
   }
   const activeRecord = activeSessions.find((s) => s.filePath === activeSessionPath)
   const title = activeRecord?.title || activeProject?.name || ''

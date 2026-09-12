@@ -465,6 +465,7 @@ export const zh = {
   'sidebar.addProjectFrom': '从 {name} 添加…',
   'sidebar.offline': '离线',
   'sidebar.settings': '设置',
+  'sidebar.waitingForInput': '等待用户确认',
   'remoteAdd.title': '从 {name} 添加项目',
   'remoteAdd.loading': '正在读取远端候选目录…',
   'remoteAdd.empty': '远端没有发现带 PI 会话的目录。',

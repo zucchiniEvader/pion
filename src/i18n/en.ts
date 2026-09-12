@@ -462,6 +462,7 @@ export const en: Record<MsgKey, string> = {
   'sidebar.addProjectFrom': 'Add from {name}…',
   'sidebar.offline': 'Offline',
   'sidebar.settings': 'Settings',
+  'sidebar.waitingForInput': 'Waiting for your answer',
   'remoteAdd.title': 'Add project from {name}',
   'remoteAdd.loading': 'Reading remote candidates…',
   'remoteAdd.empty': 'No directories with PI sessions found on this runtime.',
