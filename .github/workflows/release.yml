@@ -33,3 +33,32 @@ jobs:
       - run: gh release create "$GITHUB_REF_NAME" release/*.dmg release/*.zip release/*.blockmap release/latest-mac.yml --generate-notes --title "Pion ${GITHUB_REF_NAME#v}"
         env:
           GH_TOKEN: ${{ github.token }}
+
+  # 远程 runtime 的 daemon CLI 资产（install.sh/manifest.json/pion-daemon +
+  # 两个 resources）——纯 JS esbuild 产物，无 native 编译，ubuntu runner 即可。
+  # 应用内「远程安装」的一键命令指向 releases/latest/download，同一 tag 发布。
+  daemon-assets:
+    needs: build # Release 由 build job 创建，排在其后避免 create 竞争
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: package daemon-cli + upload assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node scripts/package-daemon.mjs --dl-base "https://github.com/${{ github.repository }}/releases/latest/download"
+          gh release upload "$GITHUB_REF_NAME" \
+            release/daemon-cli/install.sh \
+            release/daemon-cli/uninstall.sh \
+            release/daemon-cli/manifest.json \
+            release/daemon-cli/pion-daemon \
+            release/daemon-cli/resources/kanban-bridge.ts \
+            release/daemon-cli/resources/pion-commands.ts \
+            --clobber
