@@ -11,7 +11,7 @@ import { rm, stat } from 'node:fs/promises'
 import { watch, existsSync, type FSWatcher } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import type { AgentStartOptions, PiEvent, PiEventEnvelope, RpcCommand, RuntimeInfo } from '../src/types'
+import type { AgentStartOptions, PiEvent, PiEventEnvelope, RpcCommand, RpcResponse, RuntimeInfo } from '../src/types'
 import { PiRpcRuntime, detectPi, invalidatePiDetection, isExtensionLoadFailure } from './pi-rpc'
 import { piSessionRoot, sessionBucket, trackSession } from './sessions'
 import { DaemonRpcError, type DaemonServer } from './server'
@@ -512,6 +512,19 @@ export async function shutdownAgent(): Promise<void> {
   prewarmed.clear()
 }
 
+/** Lookup + send guard shared by the 'agent.command' method and internal
+ * callers (cron fire): prompt on a streaming runtime conflicts (v3: the
+ * daemon, not any client's UI, is the send-while-running authority). */
+export async function commandRuntime(runtimeId: string, command: RpcCommand): Promise<RpcResponse> {
+  const runtime = runtimes.get(runtimeId)
+  if (!runtime) throw new Error('Runtime is no longer available')
+  if (command.type === 'prompt' && runtime.snapshot().isStreaming) {
+    throw new DaemonRpcError('conflict', 'runtime is busy (agent still streaming)')
+  }
+  runtimeLastUsedAt.set(runtimeId, Date.now())
+  return runtime.command(command)
+}
+
 export function registerAgentMethods(server: DaemonServer, resources?: string): void {
   broadcastAgentEvent = (envelope) => server.broadcast('agent.event', envelope)
   if (resources) {
@@ -527,13 +540,6 @@ export function registerAgentMethods(server: DaemonServer, resources?: string): 
     const { runtimeId, command } = params as { runtimeId: string; command: RpcCommand }
     const runtime = runtimes.get(runtimeId)
     if (!runtime) throw new Error('Runtime is no longer available')
-    // v3: with multiple clients the daemon is the authority on the
-    // send-while-running guard (the renderer's draftDecision only sees its
-    // own UI). steer/follow_up/abort keep their while-running semantics.
-    if (command.type === 'prompt' && runtime.snapshot().isStreaming) {
-      throw new DaemonRpcError('conflict', 'runtime is busy (agent still streaming)')
-    }
-    runtimeLastUsedAt.set(runtimeId, Date.now())
     // extension_ui_response must reach PI verbatim (its `id` keys the
     // extension's pending request) and PI answers without an RPC envelope,
     // so it goes out fire-and-forget with a synthetic success.
@@ -541,7 +547,7 @@ export function registerAgentMethods(server: DaemonServer, resources?: string): 
       await runtime.notify(command)
       return { type: 'response', id: String(command.id ?? ''), command: command.type, success: true }
     }
-    return runtime.command(command)
+    return commandRuntime(runtimeId, command)
   })
   server.register('agent.stop', async (params) => {
     const { runtimeId } = params as { runtimeId: string }

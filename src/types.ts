@@ -104,6 +104,12 @@ export const IPC = {
   SETTINGS_PAIRING_CANCEL: 'settings:pairing-cancel',
   SETTINGS_SET_LISTENER: 'settings:set-listener',
   SETTINGS_STATUS: 'settings:status',
+  // cron (定时任务:到点由 daemon 开新会话发送 prompt;仅 app 运行时触发)
+  CRON_LIST: 'cron:list',
+  CRON_CREATE: 'cron:create',
+  CRON_REMOVE: 'cron:remove',
+  CRON_SET_ENABLED: 'cron:set-enabled',
+  CRON_RUN_NOW: 'cron:run-now',
 } as const
 
 /**
@@ -550,6 +556,36 @@ export interface KanbanBoard {
   cards: KanbanCard[]
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// cron (scheduled prompts; daemon owns store + tick, <userData>/cron.json)
+// ─────────────────────────────────────────────────────────────────────────
+
+export interface CronJob {
+  id: string // 'cron_' + 8 random chars
+  projectPath: string
+  /** Optional display label; the dialog falls back to the prompt head. */
+  name?: string
+  /** 5-field cron expression (minute hour dom month dow), local time. */
+  schedule: string
+  prompt: string
+  enabled: boolean
+  /** ISO; next planned fire (enabled jobs only). */
+  nextRunAt?: string
+  lastRunAt?: string
+  /** Session file the last fire spawned (detail page deep-links to it). */
+  lastSessionFile?: string
+  /** Last fire failure (readable; cleared by the next success). */
+  lastError?: string
+  createdAt: string
+}
+
+export interface CronCreateInput {
+  projectPath: string
+  schedule: string
+  prompt: string
+  name?: string
+}
+
 /**
  * Append-only event schema v1 (docs/kanban-design.md §2). One JSON object per
  * line in events.jsonl; unknown types are skipped on replay (forward compat).
@@ -759,6 +795,15 @@ export interface PiGuiApi {
     /** Moves an unassigned card into a project store (same id, history kept). */
     moveProject: (projectPath: string, cardId: string, toProjectPath: string) => Promise<KanbanCard>
     onChanged: (cb: (e: KanbanChangeEvent) => void) => () => void
+  }
+  cron: {
+    list: (projectPath: string) => Promise<CronJob[]>
+    create: (input: CronCreateInput) => Promise<CronJob>
+    /** projectPath routes to the daemon owning the project (same as kanban). */
+    remove: (projectPath: string, id: string) => Promise<void>
+    setEnabled: (projectPath: string, id: string, enabled: boolean) => Promise<CronJob>
+    /** Fires the job immediately (outside its schedule). */
+    runNow: (projectPath: string, id: string) => Promise<void>
   }
   updates: {
     /** Latest cached result (null until the first check completes). */

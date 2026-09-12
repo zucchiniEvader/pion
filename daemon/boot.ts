@@ -18,6 +18,7 @@ import { registerKanbanMethods, stopKanbanStore, shutdownKanban } from './kanban
 import { registerGitMethods } from './git'
 import { registerVersionCheckMethods, stopPiUpdate } from './version-check'
 import { registerSettingsMethods } from './settings'
+import { registerCronMethods } from './cron'
 
 export const DAEMON_VERSION = '0.1.0'
 // stop() rungs are SIGTERM(2s)+SIGKILL(1.5s) per pi child; parallel across
@@ -148,6 +149,7 @@ export async function runDaemon(opts: BootOptions): Promise<void> {
   registerGitMethods(server)
   registerVersionCheckMethods(server, userData)
   registerSettingsMethods(server)
+  registerCronMethods(server, userData)
   setProjectRemovalHook((id) => stopKanbanStore(id))
   // v2: daemon.shutdown replies ok, then triggers the same graceful ladder.
   server.setShutdownHook(() => shutdown('daemon.shutdown', userData))

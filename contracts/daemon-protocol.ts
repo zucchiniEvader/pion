@@ -8,6 +8,8 @@
 import type {
   AgentStartOptions,
   AuthStateResult,
+  CronCreateInput,
+  CronJob,
   GitOverview,
   KanbanAssignInput,
   KanbanBoard,
@@ -268,6 +270,17 @@ export interface DaemonMethodMap {
   'version-check.result': { params: Record<string, never>; result: UpdateCheckResult | null }
   'version-check.recheck': { params: Record<string, never>; result: UpdateCheckResult | null }
   'version-check.update': { params: Record<string, never>; result: { started: boolean; error?: string } }
+
+  // cron (v3 additive, same rule as daemon.info: old clients never call,
+  // new clients on an old daemon get not_found). Scheduled prompts: the
+  // daemon fires startRuntime + prompt on the job's cron expression while
+  // it runs; jobs persist in <userData>/cron.json and simply resume at the
+  // next occurrence after a restart (no catch-up for missed runs).
+  'cron.list': { params: { projectPath: string }; result: CronJob[] }
+  'cron.create': { params: CronCreateInput; result: CronJob }
+  'cron.remove': { params: { id: string }; result: null }
+  'cron.setEnabled': { params: { id: string; enabled: boolean }; result: CronJob }
+  'cron.runNow': { params: { id: string }; result: null }
 }
 
 export type DaemonMethodName = keyof DaemonMethodMap & string

@@ -13,6 +13,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Clock,
   ExternalLink,
   Folder,
   FolderOpen,
@@ -70,6 +71,10 @@ interface SidebarProps {
   /** Promotes an archived session back into the regular list. */
   onUnarchiveSession: (session: SessionRecord) => void
   onRemoveProject: (project: ProjectRecord) => void
+  /** Opens the global scheduler surface (main-area, sibling of the board). */
+  onOpenScheduler: () => void
+  /** Scheduler surface is showing (entry active state). */
+  schedulerActive: boolean
   onCollapse: () => void
   /** Back/forward over view transitions; disabled flags come from App's history. */
   navBack: boolean
@@ -107,6 +112,8 @@ export function Sidebar({
   onArchiveSession,
   onUnarchiveSession,
   onRemoveProject,
+  onOpenScheduler,
+  schedulerActive,
   onCollapse,
   navBack,
   navForward,
@@ -216,6 +223,19 @@ export function Sidebar({
           <SquarePen size={16} strokeWidth={1.75} className="shrink-0" />
           <span>{t('sidebar.newTask')}</span>
           <span className="kbd ml-auto">⌘N</span>
+        </button>
+        {/* Scheduler entry below 新建任务: switches the main area to the
+            scheduler surface (all projects' cron jobs + create form). */}
+        <button
+          className={cn(
+            'mt-1 flex h-9 w-full items-center gap-2.5 rounded-lg px-2 text-[13px] font-medium transition-colors',
+            schedulerActive ? 'bg-fill-active text-ink' : 'text-ink hover:bg-fill-hover',
+          )}
+          onClick={onOpenScheduler}
+          title={t('sidebar.scheduler')}
+        >
+          <Clock size={16} strokeWidth={1.75} className="shrink-0" />
+          <span>{t('sidebar.scheduler')}</span>
         </button>
         {/* Board entry below 新建任务: the one board switch for the whole app.
             Active state shows where you are; clicking again returns to the

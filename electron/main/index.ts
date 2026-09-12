@@ -308,6 +308,25 @@ function registerIpc(): void {
   ipcMain.handle(IPC.KANBAN_DISPATCH, async (_e, projectPath: string, cardId: string, input: unknown) =>
     route(projectPath).call('kanban.dispatch', { projectPath, cardId, input: input as never }))
 
+  ipcMain.handle(IPC.CRON_LIST, async (_e, projectPath: string) =>
+    route(projectPath)
+      .call('cron.list', { projectPath })
+      .catch((e) => {
+        // A remote daemon predating cron answers not_found ("unknown
+        // method"): that runtime is simply cron-less — return [] instead of
+        // an error (v3 additive fallback, handled client-side by design).
+        if (/unknown method/.test(e instanceof Error ? e.message : String(e))) return []
+        throw e
+      }))
+  ipcMain.handle(IPC.CRON_CREATE, async (_e, input: unknown) => {
+    const { projectPath } = input as { projectPath: string }
+    return route(projectPath).call('cron.create', input as never)
+  })
+  ipcMain.handle(IPC.CRON_REMOVE, async (_e, projectPath: string, id: string) => route(projectPath).call('cron.remove', { id }))
+  ipcMain.handle(IPC.CRON_SET_ENABLED, async (_e, projectPath: string, id: string, enabled: boolean) =>
+    route(projectPath).call('cron.setEnabled', { id, enabled }))
+  ipcMain.handle(IPC.CRON_RUN_NOW, async (_e, projectPath: string, id: string) => route(projectPath).call('cron.runNow', { id }))
+
   ipcMain.handle(IPC.APP_REVEAL_PATH, async (_e, path: string) => {
     await shell.showItemInFolder(path)
   })

@@ -20,6 +20,7 @@ const suites = [
   { entry: 'src/lib/piVersion.ts', bundle: 'piVersion.bundle.mjs', test: 'scripts/pi-version.purity.test.mjs' },
   { entry: 'src/lib/pluginAdapters.ts', bundle: 'pluginAdapters.bundle.mjs', test: 'scripts/plugin-adapters.purity.test.mjs' },
   { entry: 'daemon/pi-rpc.ts', bundle: 'piRpc.bundle.mjs', test: 'scripts/nvm-versions.purity.test.mjs' },
+  { entry: 'daemon/cron-schedule.ts', bundle: 'cronSchedule.bundle.mjs', test: 'scripts/cron-schedule.purity.test.mjs' },
   { entry: 'electron/main/window-bounds.ts', bundle: 'windowBounds.bundle.mjs', test: 'scripts/window-bounds.purity.test.mjs' },
 ]
 

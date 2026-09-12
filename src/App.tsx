@@ -7,6 +7,7 @@ import { Sidebar } from '@/components/Sidebar'
 import { cn } from '@/lib/utils'
 import { SettingsDialog, type SettingsSection } from '@/components/SettingsDialog'
 import { RemoteAddDialog } from '@/components/RemoteAddDialog'
+import { SchedulerPage } from '@/components/SchedulerPage'
 import { Transcript } from '@/components/Transcript'
 import { Composer } from '@/components/Composer'
 import { ExtensionPrompt, findQuestionnaire } from '@/components/ExtensionPrompt'
@@ -51,7 +52,7 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   // Main-area surface: the conversation (session view) or the project's
   // kanban board. Board state is per project; switching projects keeps it.
-  const [mainView, setMainView] = useState<'session' | 'board'>('session')
+  const [mainView, setMainView] = useState<'session' | 'board' | 'scheduler'>('session')
   const [elapsedSec, setElapsedSec] = useState(0)
   const pool = useSessionPool()
   // Aggregated board data lives here (single owner): the sidebar's review
@@ -454,12 +455,12 @@ export default function App() {
   // Back/forward over view transitions (session ↔ board ↔ home). A location
   // is just the two top-level states; entries whose session has since been
   // removed are skipped instead of blocking navigation.
-  const [nav, setNav] = useState<{ stack: { view: 'session' | 'board'; path: string | null }[]; idx: number }>({
+  const [nav, setNav] = useState<{ stack: { view: 'session' | 'board' | 'scheduler'; path: string | null }[]; idx: number }>({
     stack: [{ view: 'session', path: null }],
     idx: 0,
   })
   useEffect(() => {
-    const loc = { view: mainView, path: mainView === 'board' ? null : activeSessionPath ?? null }
+    const loc = { view: mainView, path: mainView === 'session' ? activeSessionPath ?? null : null }
     setNav(({ stack, idx }) => {
       const cur = stack[idx]
       // Applying a history entry re-enters here with an unchanged location: no push.
@@ -474,6 +475,8 @@ export default function App() {
     const target = stack[next]
     if (target.view === 'board') {
       setMainView('board')
+    } else if (target.view === 'scheduler') {
+      setMainView('scheduler')
     } else {
       // path=null is the home surface (no session) — a legal destination.
       setMainView('session')
@@ -646,6 +649,8 @@ export default function App() {
           onArchiveSession={archiveSession}
           onUnarchiveSession={unarchiveSession}
           onRemoveProject={(p) => void removeProject(p)}
+          onOpenScheduler={() => setMainView('scheduler')}
+          schedulerActive={mainView === 'scheduler'}
           onCollapse={() => setSidebarOpen(false)}
           navBack={nav.idx > 0}
           navForward={nav.idx < nav.stack.length - 1}
@@ -655,8 +660,8 @@ export default function App() {
       </div>
 
       <main className="relative flex min-w-0 flex-1 flex-col">
-        {/* The session titlebar is not part of the board surface. */}
-        {mainView !== 'board' && (
+        {/* The session titlebar is not part of the board/scheduler surface. */}
+        {mainView === 'session' && (
           <SessionHeader
             sidebarOpen={sidebarOpen}
             onOpenSidebar={() => setSidebarOpen(true)}
@@ -671,6 +676,8 @@ export default function App() {
 
         {mainView === 'board' ? (
           <BoardView projects={projects} runtimes={runtimes} kanban={kanbanBoards} onViewSession={jumpToSession} />
+        ) : mainView === 'scheduler' ? (
+          <SchedulerPage projects={projects} defaultProjectPath={activeProject?.path ?? null} onViewSession={jumpToSession} />
         ) : (
           <>
         {homeHero}

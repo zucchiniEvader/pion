@@ -21,6 +21,8 @@ import type {
   KanbanCreateInput,
   KanbanDispatchInput,
   KanbanUpdateInput,
+  CronCreateInput,
+  CronJob,
   SettingsResult,
   SettingsRuntime,
   SettingsPairingInfo,
@@ -167,6 +169,17 @@ function asKanbanUpdateInput(patch: unknown): KanbanUpdateInput {
     ...(v.title !== undefined ? { title: assertNonEmptyString(v.title, 'title', 200) } : {}),
     ...(v.body !== undefined ? { body: assertString(v.body, 'body', 32768) } : {}),
     ...(v.acceptance !== undefined ? { acceptance: assertAcceptance(v.acceptance) } : {}),
+  }
+}
+
+function asCronCreateInput(input: unknown): CronCreateInput {
+  if (!input || typeof input !== 'object') throw new TypeError('input must be an object')
+  const v = input as Record<string, unknown>
+  return {
+    projectPath: assertProjectPath(v.projectPath),
+    schedule: assertNonEmptyString(v.schedule, 'schedule', 100),
+    prompt: assertNonEmptyString(v.prompt, 'prompt', 8192),
+    ...(v.name !== undefined ? { name: assertString(v.name, 'name', 80) } : {}),
   }
 }
 
@@ -348,6 +361,16 @@ const api: PiGuiApi = {
       return invoke<KanbanCard>(IPC.KANBAN_MOVE_PROJECT, assertProjectPath(projectPath), assertNonEmptyString(cardId, 'cardId'), to)
     },
     onChanged: (cb) => subscribe<KanbanChangeEvent>(IPC.KANBAN_CHANGED, cb),
+  },
+  cron: {
+    list: (projectPath) => invoke<CronJob[]>(IPC.CRON_LIST, assertProjectPath(projectPath)),
+    create: (input) => invoke<CronJob>(IPC.CRON_CREATE, asCronCreateInput(input)),
+    remove: (projectPath, id) => invoke<void>(IPC.CRON_REMOVE, assertProjectPath(projectPath), assertNonEmptyString(id, 'id')),
+    setEnabled: (projectPath, id, enabled) => {
+      if (typeof enabled !== 'boolean') throw new TypeError('enabled must be a boolean')
+      return invoke<CronJob>(IPC.CRON_SET_ENABLED, assertProjectPath(projectPath), assertNonEmptyString(id, 'id'), enabled)
+    },
+    runNow: (projectPath, id) => invoke<void>(IPC.CRON_RUN_NOW, assertProjectPath(projectPath), assertNonEmptyString(id, 'id')),
   },
   updates: {
     result: () => invoke<UpdateCheckResult | null>(IPC.VERSION_CHECK_RESULT),
