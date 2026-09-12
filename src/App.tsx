@@ -429,17 +429,23 @@ export default function App() {
     })
   }, [openSession])
 
-  // ⌘N / Ctrl+N starts a new task in the current project.
+  // ⌘N / Ctrl+N starts a new task in the current project; ⌘, opens settings
+  // (the platform convention — plain keydown, no hotkey library needed).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'n' && !e.shiftKey && !e.altKey) {
+      const mod = (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey
+      if (!mod) return
+      if (e.key.toLowerCase() === 'n') {
         e.preventDefault()
         void newSession()
+      } else if (e.key === ',') {
+        e.preventDefault()
+        openSettings()
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [newSession])
+  }, [newSession, openSettings])
 
   // Rename on the file (session_info record) first; then sync PI's in-memory
   // name if the session happens to be live.

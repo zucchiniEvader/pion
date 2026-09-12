@@ -40,8 +40,8 @@ export const zh = {
   'err.cron.invalidSchedule': '无效的 cron 表达式(应为 5 段:分 时 日 月 周)。',
   'err.cron.invalidPrompt': '发送内容不能为空。',
   'err.cron.projectMissing': '项目不存在。',
-  'err.cron.jobMissing': '定时任务不存在。',
-  'err.cron.noSession': '定时任务启动的会话没有会话文件。',
+  'err.cron.jobMissing': '定时器不存在。',
+  'err.cron.noSession': '定时器启动的会话没有会话文件。',
 
   // —— 通用 ——
   'common.cancel': '取消',
@@ -114,7 +114,7 @@ export const zh = {
   'sidebar.projectOptionsAria': '{name} 项目选项',
   'sidebar.projectOptions': '项目选项',
   'sidebar.showInFinder': '在 Finder 中显示',
-  'sidebar.scheduler': '定时任务',
+  'sidebar.scheduler': '定时器',
   'sidebar.confirmRemove': '确认移除',
   'sidebar.removeProject': '移除项目…',
   'sidebar.removeProjectHint': '会话文件仍保留在磁盘上,之后可重新添加。',
@@ -126,10 +126,10 @@ export const zh = {
   'sidebar.updatesCount': '{count} 项更新',
   'sidebar.untitledTask': '未命名任务',
 
-  // —— 定时任务(daemon/cron.ts + CronDialog)——
-  'cron.title': '定时任务',
-  'cron.new': '新建定时任务',
-  'cron.empty': '还没有定时任务。',
+  // —— 定时器(daemon/cron.ts + SchedulerPage)——
+  'cron.title': '定时器',
+  'cron.new': '新建定时器',
+  'cron.empty': '还没有定时器。',
   'cron.fieldProject': '项目',
   'cron.fieldName': '名称(可选)',
   'cron.namePlaceholder': '例如:每日进展摘要',

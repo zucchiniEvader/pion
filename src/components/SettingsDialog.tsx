@@ -131,6 +131,11 @@ export function SettingsDialog({ meta, runtimes, onRefresh, initialSection, upda
               >
                 <Icon size={14} strokeWidth={1.75} className="shrink-0" />
                 <span className="truncate">{label}</span>
+                {id === 'runtimes' && (
+                  <span className="ml-auto rounded bg-tint-warn px-1 py-px text-[9px] font-semibold uppercase tracking-wide text-warn">
+                    Beta
+                  </span>
+                )}
               </button>
             ))}
           </nav>
