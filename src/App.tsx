@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 import { SettingsDialog, type SettingsSection } from '@/components/SettingsDialog'
 import { RemoteAddDialog } from '@/components/RemoteAddDialog'
 import { SchedulerPage } from '@/components/SchedulerPage'
+import { ChangesPanel, CHANGES_PANEL_WIDTH } from '@/components/ChangesPanel'
 import { Transcript } from '@/components/Transcript'
 import { Composer } from '@/components/Composer'
 import { ExtensionPrompt, findQuestionnaire } from '@/components/ExtensionPrompt'
@@ -72,6 +73,33 @@ export default function App() {
     setSettingsOpen(true)
   }, [])
   const [addFromRuntime, setAddFromRuntime] = useState<SettingsRuntime | null>(null)
+  const [changesOpen, setChangesOpen] = useState(false)
+  // Window-grow accounting for the changes panel: the grow IPC's promise is
+  // kept so close can shrink by the APPLIED amount in order, even when the
+  // round-trip outlives the toggle (no wide-window leftovers, no flash of
+  // late layout — grow/shrink fire in the same event as the state change).
+  const changesGrow = useRef<Promise<number> | null>(null)
+  // Once opened, the panel stays mounted so close animates (width → 0)
+  // instead of an unmount pop.
+  const changesMounted = useRef(false)
+  const closeChanges = useCallback(() => {
+    const grown = changesGrow.current
+    changesGrow.current = null
+    setChangesOpen(false)
+    if (grown) void grown.then((d) => window.pi.app.growWindow(-d))
+  }, [])
+  const toggleChanges = useCallback(() => {
+    if (changesOpen) {
+      closeChanges()
+      return
+    }
+    // Opening the right panel collapses the left sidebar — the two compete
+    // for the same horizontal budget.
+    setSidebarOpen(false)
+    setChangesOpen(true)
+    changesMounted.current = true
+    changesGrow.current = window.pi.app.growWindow(CHANGES_PANEL_WIDTH)
+  }, [changesOpen, closeChanges])
   // Update-check subscription is owned HERE (single-subscriber rule): the
   // sidebar badge renders from the result, Settings > Updates drives actions.
   const updateCheck = useUpdateCheck()
@@ -659,7 +687,7 @@ export default function App() {
         />
       </div>
 
-      <main className="relative flex min-w-0 flex-1 flex-col">
+      <main className="relative flex min-w-[520px] flex-1 flex-col">
         {/* The session titlebar is not part of the board/scheduler surface. */}
         {mainView === 'session' && (
           <SessionHeader
@@ -671,6 +699,8 @@ export default function App() {
             onNavForward={() => navGo(1)}
             title={title}
             project={activeProject}
+            changesOpen={changesOpen}
+            onToggleChanges={toggleChanges}
           />
         )}
 
@@ -781,6 +811,7 @@ export default function App() {
           <div className="border-t-[0.5px] border-bad/30 bg-tint-bad px-4 py-2 text-xs text-bad">{ue(active?.error ?? pool.error)}</div>
         )}
       </main>
+      {activeProject && (changesOpen || changesMounted.current) && <ChangesPanel project={activeProject} open={changesOpen} onClose={closeChanges} />}
       <ImageLightbox />
       {settingsOpen && (
         <SettingsDialog

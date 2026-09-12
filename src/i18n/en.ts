@@ -240,6 +240,13 @@ export const en: Record<MsgKey, string> = {
   'header.createWorktreeFor': 'Create worktree for {name}',
   'header.openGhostty': 'Open in Ghostty',
   'header.openVSCode': 'Open in VS Code',
+  'header.changes': 'Changes panel',
+  'changes.title': 'Git changes',
+  'changes.empty': 'Working tree clean',
+  'changes.notRepo': 'This project is not a git repository',
+  'changes.noDiff': 'No diff to display.',
+  'changes.truncated': 'Diff too large — truncated.',
+  'err.git.invalidPath': 'Invalid file path.',
 
   // —— tool-row (plan-mode cards) ——
   'tool.noPlan': '(No plan content)',

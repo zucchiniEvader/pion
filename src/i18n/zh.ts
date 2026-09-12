@@ -244,6 +244,13 @@ export const zh = {
   'header.createWorktreeFor': '为 {name} 创建 worktree',
   'header.openGhostty': '在 Ghostty 中打开',
   'header.openVSCode': '在 VS Code 中打开',
+  'header.changes': '变更面板',
+  'changes.title': 'Git 变更',
+  'changes.empty': '工作区干净',
+  'changes.notRepo': '该项目不是 git 仓库',
+  'changes.noDiff': '没有可显示的差异。',
+  'changes.truncated': '差异过大,已截断。',
+  'err.git.invalidPath': '无效的文件路径。',
 
   // —— tool-row（plan-mode 卡片）——
   'tool.noPlan': '(无计划内容)',

@@ -659,7 +659,7 @@ export function Composer({
           {showProjectHint ? (
             <span className="pl-1 text-[11px] font-medium text-bad">{t('composer.pickProjectFirst')}</span>
           ) : !running && !stopping ? (
-            <span className="pl-1 text-[11px] text-ink2/60">{t('composer.inputHint')}</span>
+            <span className="min-w-0 truncate pl-1 text-[11px] whitespace-nowrap text-ink2/60">{t('composer.inputHint')}</span>
           ) : (
             <span />
           )}

@@ -10,7 +10,9 @@ import type {
   AuthStateResult,
   CronCreateInput,
   CronJob,
+  GitFileDiff,
   GitOverview,
+  GitStatusResult,
   KanbanAssignInput,
   KanbanBoard,
   KanbanCard,
@@ -265,6 +267,11 @@ export interface DaemonMethodMap {
   // git
   'git.overview': { params: { projectPath: string }; result: GitOverview }
   'git.createWorktree': { params: { projectPath: string; branch: string }; result: WorktreeCreated }
+  /** v3 additive (same rule as cron.*): working-tree change list for the
+   * right-side changes panel; old daemons answer not_found. */
+  'git.changedFiles': { params: { projectPath: string }; result: GitStatusResult }
+  /** v3 additive: unified diff of one changed path (panel drill-down). */
+  'git.fileDiff': { params: { projectPath: string; path: string }; result: GitFileDiff }
 
   // version-check (pi + extensions; cache path comes from --user-data)
   'version-check.result': { params: Record<string, never>; result: UpdateCheckResult | null }

@@ -11,6 +11,8 @@ import type {
   SessionChangeEvent,
   AgentStartOptions,
   GitOverview,
+  GitFileDiff,
+  GitStatusResult,
   WorktreeCreated,
   PiGuiApi,
   CardStatus,
@@ -227,6 +229,13 @@ const api: PiGuiApi = {
     openExternal: (url) => invoke<void>(IPC.APP_OPEN_EXTERNAL, url),
     openGhostty: (path) => invoke<void>(IPC.APP_OPEN_GHOSTTY, path),
     openVSCode: (path) => invoke<void>(IPC.APP_OPEN_VSCODE, path),
+    /** Grows (or shrinks, negative delta) the window width to the right,
+     * clamped to the display's work area. Used by the changes panel so
+     * opening it expands the window instead of squeezing the center. */
+    growWindow: (delta) => {
+      if (typeof delta !== 'number' || !Number.isFinite(delta)) throw new TypeError('delta must be a number')
+      return invoke<number>(IPC.APP_GROW_WINDOW, Math.trunc(delta))
+    },
     setTheme: (theme) => {
       if (theme !== 'system' && theme !== 'light' && theme !== 'dark') throw new TypeError('theme must be system|light|dark')
       return invoke<void>(IPC.APP_SET_THEME, theme)
@@ -256,6 +265,9 @@ const api: PiGuiApi = {
   },
   git: {
     overview: (projectPath) => invoke<GitOverview>(IPC.GIT_OVERVIEW, projectPath),
+    changedFiles: (projectPath) => invoke<GitStatusResult>(IPC.GIT_CHANGED_FILES, assertProjectPath(projectPath)),
+    fileDiff: (projectPath, path) =>
+      invoke<GitFileDiff>(IPC.GIT_FILE_DIFF, assertProjectPath(projectPath), assertNonEmptyString(path, 'path', 4096)),
     createWorktree: (projectPath, branch) => invoke<WorktreeCreated>(IPC.GIT_WORKTREE_CREATE, projectPath, branch),
   },
   projects: {

@@ -14,6 +14,8 @@ export const IPC = {
   APP_OPEN_EXTERNAL: 'app:open-external',
   APP_OPEN_GHOSTTY: 'app:open-ghostty',
   APP_OPEN_VSCODE: 'app:open-vscode',
+  /** Width nudge for the right-side changes panel (client-local window op). */
+  APP_GROW_WINDOW: 'app:grow-window',
   /** settings General: nativeTheme.themeSource sync (docs/settings-design.md §4). */
   APP_SET_THEME: 'app:set-theme',
   /** settings Updates: GUI app latest-release probe (client-local, 24h cache). */
@@ -33,6 +35,10 @@ export const IPC = {
   // git (project branch / worktree)
   GIT_OVERVIEW: 'git:overview',
   GIT_WORKTREE_CREATE: 'git:worktree-create',
+  /** Working-tree change list for the right-side changes panel. */
+  GIT_CHANGED_FILES: 'git:changed-files',
+  /** Unified diff of one changed file (changes panel drill-down). */
+  GIT_FILE_DIFF: 'git:file-diff',
   // projects (recent)
   PROJECTS_LIST: 'projects:list',
   PROJECTS_ADD: 'projects:add',
@@ -300,6 +306,29 @@ export interface GitOverview {
 
 export interface WorktreeCreated {
   path: string
+}
+
+/** One changed path from `git status --porcelain` (worktree of a project).
+ * x/y are the raw two-column status codes (X = staged, Y = worktree) so the
+ * UI can distinguish staged vs unstaged and untracked ('??'). */
+export interface GitChangedFile {
+  path: string
+  x: string
+  y: string
+}
+
+export interface GitStatusResult {
+  isRepo: boolean
+  files: GitChangedFile[]
+}
+
+/** Unified diff for one changed path (diff against HEAD; untracked files are
+ * diffed against /dev/null so their whole content shows as added). */
+export interface GitFileDiff {
+  path: string
+  diff: string
+  /** Output was cut at the daemon's line cap. */
+  truncated: boolean
 }
 
 export interface SessionRecord {
@@ -683,6 +712,10 @@ export interface PiGuiApi {
     openGhostty: (path: string) => Promise<void>
     /** Opens a directory in VS Code. */
     openVSCode: (path: string) => Promise<void>
+    /** Adjusts the window width by delta px (right edge moves), clamped to
+     * the display work area. Negative shrinks. Resolves the APPLIED delta
+     * (the clamp may have cut it) so callers can undo exactly. */
+    growWindow: (delta: number) => Promise<number>
     /** Syncs the appearance preference to nativeTheme.themeSource. */
     setTheme: (theme: ThemeSetting) => Promise<void>
     /** GUI latest-release probe (24h-cached in main; null latest when no
@@ -722,6 +755,12 @@ export interface PiGuiApi {
     /** Creates a worktree for an existing or new branch; idempotent when the
      * branch already has one. */
     createWorktree: (projectPath: string, branch: string) => Promise<WorktreeCreated>
+    /** Working-tree changes (pi has no agent-modified-files API; git status
+     * is the fallback truth — refreshed by the panel's own polling). */
+    changedFiles: (projectPath: string) => Promise<GitStatusResult>
+    /** Unified diff for one path from changedFiles (untrusted input — the
+     * daemon validates it stays inside the project). */
+    fileDiff: (projectPath: string, path: string) => Promise<GitFileDiff>
   }
   projects: {
     list: () => Promise<ProjectRecord[]>

@@ -5,9 +5,10 @@
 import { execFile } from 'node:child_process'
 import { dirname, join } from 'node:path'
 import { access, constants as fsConstants, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises'
-import type { GitOverview } from '../src/types'
+import type { GitFileDiff, GitOverview, GitStatusResult } from '../src/types'
 import { safeChildEnvironment } from './pi-rpc'
 import { loadProjects } from './projects'
+import { parsePorcelainZ } from './git-status'
 import type { DaemonServer } from './server'
 
 const GIT_TIMEOUT_MS = 15_000
@@ -58,7 +59,7 @@ function resolveGit(): Promise<string | null> {
 // One-shot execution
 // ──────────────────────────────────────────────────────────────────────────
 
-function runGit(cwd: string, args: string[]): Promise<string> {
+function runGit(cwd: string, args: string[], okExitCodes: number[] = [0]): Promise<string> {
   return resolveGit().then((exe) => {
     if (!exe) return Promise.reject(new Error('未找到 git 可执行文件。'))
     return new Promise((resolve, reject) => {
@@ -67,7 +68,10 @@ function runGit(cwd: string, args: string[]): Promise<string> {
         args,
         { cwd, shell: false, env: safeChildEnvironment(), windowsHide: true, timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_MAX_BUFFER },
         (error, stdout, stderr) => {
-          if (error) {
+          // execFile reports a non-zero exit as an error whose .code is the
+          // exit code; some git commands use 1 for a successful-with-content
+          // result (diff --no-index has differences).
+          if (error && !okExitCodes.includes(Number((error as NodeJS.ErrnoException).code))) {
             const detail = stderr.trim().split('\n').pop() ?? error.message
             reject(new Error(detail || 'git 命令执行失败。'))
           } else {
@@ -197,11 +201,66 @@ async function assertProjectDirectory(projectPath: string): Promise<void> {
   if (!info?.isDirectory()) throw new Error('Project directory no longer exists.')
 }
 
+// ──────────────────────────────────────────────────────────────────────────
+// Changed files: working-tree status for the right-side changes panel. pi
+// has no API for "files the agent touched", so git status is the displayed
+// truth (docs note: it also covers edits made outside the agent).
+// ──────────────────────────────────────────────────────────────────────────
+
+export async function gitChangedFiles(projectPath: string): Promise<GitStatusResult> {
+  try {
+    await runGit(projectPath, ['rev-parse', '--is-inside-work-tree'])
+  } catch {
+    return { isRepo: false, files: [] }
+  }
+  const raw = await runGit(projectPath, ['status', '--porcelain=v1', '-z', '-uall'])
+  return { isRepo: true, files: parsePorcelainZ(raw) }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// File diff: unified diff for one path from the changes panel. The path is
+// renderer-supplied → validated to stay inside the project before it ever
+// reaches a git argv (always after `--`, never an option).
+// ──────────────────────────────────────────────────────────────────────────
+
+const DIFF_LINE_CAP = 2000
+
+function assertRelativePath(path: unknown): string {
+  if (typeof path !== 'string' || !path || path.includes('\0') || path.startsWith('/') || path.startsWith('-') || path.split('/').includes('..')) {
+    throw new Error('err.git.invalidPath')
+  }
+  return path
+}
+
+export async function gitFileDiff(projectPath: string, rawPath: string): Promise<GitFileDiff> {
+  const path = assertRelativePath(rawPath)
+  // Worktree+index vs HEAD covers modified/staged/deleted in one shot.
+  let diff = await runGit(projectPath, ['diff', 'HEAD', '--', path]).catch(() => '')
+  if (!diff.trim()) {
+    // Untracked (or otherwise HEAD-less): whole content as an addition.
+    // diff --no-index exits 1 when differences exist — a success here.
+    diff = await runGit(projectPath, ['diff', '--no-index', '--', '/dev/null', path], [0, 1]).catch(() => '')
+  }
+  const lines = diff.split('\n')
+  const truncated = lines.length > DIFF_LINE_CAP
+  return { path, diff: truncated ? lines.slice(0, DIFF_LINE_CAP).join('\n') : diff, truncated }
+}
+
 export function registerGitMethods(server: DaemonServer): void {
   server.register('git.overview', async (params) => {
     const { projectPath } = params as { projectPath: string }
     await assertProjectDirectory(projectPath)
     return gitOverview(projectPath)
+  })
+  server.register('git.changedFiles', async (params) => {
+    const { projectPath } = params as { projectPath: string }
+    await assertProjectDirectory(projectPath)
+    return gitChangedFiles(projectPath)
+  })
+  server.register('git.fileDiff', async (params) => {
+    const { projectPath, path } = params as { projectPath: string; path: string }
+    await assertProjectDirectory(projectPath)
+    return gitFileDiff(projectPath, path)
   })
   server.register('git.createWorktree', async (params) => {
     const { projectPath, branch } = params as { projectPath: string; branch: string }

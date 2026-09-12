@@ -13,6 +13,7 @@ import {
   GitBranch,
   LoaderCircle,
   PanelLeftOpen,
+  PanelRight,
   Plus,
 } from 'lucide-react'
 
@@ -27,6 +28,9 @@ interface SessionHeaderProps {
   /** Session title; falls back to the project name in App. */
   title: string
   project: ProjectRecord | null
+  /** Right-side changes panel (git working tree) toggle. */
+  changesOpen: boolean
+  onToggleChanges: () => void
 }
 
 // One metric for every header chip so text chips and the icon-only button
@@ -82,7 +86,7 @@ const capTitle = (t: string) => {
 // Session-page top bar: draggable chrome with the session title, static
 // project chip, branch/worktree dropdown, and the "open externally" icon
 // group (Finder / Ghostty / VS Code).
-export function SessionHeader({ sidebarOpen, onOpenSidebar, navBack, navForward, onNavBack, onNavForward, title, project }: SessionHeaderProps) {
+export function SessionHeader({ sidebarOpen, onOpenSidebar, navBack, navForward, onNavBack, onNavForward, title, project, changesOpen, onToggleChanges }: SessionHeaderProps) {
   const { t } = useI18n()
   const ue = useUserErrorMessage()
   const [branchMenuOpen, setBranchMenuOpen] = useState(false)
@@ -390,6 +394,15 @@ export function SessionHeader({ sidebarOpen, onOpenSidebar, navBack, navForward,
             </div>
           )}
         </span>
+      )}
+      {project && (
+        <button
+          className={cn(chip, 'no-drag hover:bg-fill-hover hover:text-ink', changesOpen && 'bg-fill-active text-ink')}
+          title={t('header.changes')}
+          onClick={onToggleChanges}
+        >
+          <PanelRight size={13} strokeWidth={1.75} />
+        </button>
       )}
     </header>
   )

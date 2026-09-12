@@ -336,8 +336,38 @@ function registerIpc(): void {
   ipcMain.handle(IPC.APP_OPEN_GHOSTTY, async (_e, path: string) => openInApp('Ghostty', 'Ghostty.app', path))
   ipcMain.handle(IPC.APP_OPEN_VSCODE, async (_e, path: string) => openInApp('Visual Studio Code', 'Visual Studio Code.app', path))
 
+  // Changes-panel companion (client-local): widening the window makes room
+  // for the panel instead of squeezing the session area. Grows toward the
+  // right edge only; clamped to the display work area (no-op at the edge).
+  ipcMain.handle(IPC.APP_GROW_WINDOW, (e, delta: number) => {
+    if (typeof delta !== 'number' || !Number.isFinite(delta)) return 0
+    const win = BrowserWindow.fromWebContents(e.sender)
+    if (!win) return 0
+    const bounds = win.getBounds()
+    const workArea = screen.getDisplayMatching(bounds).workArea
+    const maxWidth = workArea.x + workArea.width - bounds.x
+    const width = Math.max(720, Math.min(bounds.width + Math.trunc(delta), maxWidth))
+    const applied = width - bounds.width
+    // Return the APPLIED delta (the clamp may have cut it): the panel
+    // shrinks by exactly what it grew, never more.
+    if (applied !== 0) win.setBounds({ ...bounds, width })
+    panelGrowOffset.set(win.id, (panelGrowOffset.get(win.id) ?? 0) + applied)
+    return applied
+  })
+
   ipcMain.handle(IPC.GIT_OVERVIEW, async (_e, projectPath: string) =>
     route(projectPath).call('git.overview', { projectPath }))
+  ipcMain.handle(IPC.GIT_CHANGED_FILES, async (_e, projectPath: string) =>
+    route(projectPath)
+      .call('git.changedFiles', { projectPath })
+      .catch((e) => {
+        // Same v3-additive fallback as cron.list: a remote daemon predating
+        // this method makes the project panel-less, not error-bannered.
+        if (/unknown method/.test(e instanceof Error ? e.message : String(e))) return { isRepo: false, files: [] }
+        throw e
+      }))
+  ipcMain.handle(IPC.GIT_FILE_DIFF, async (_e, projectPath: string, path: string) =>
+    route(projectPath).call('git.fileDiff', { projectPath, path }))
   ipcMain.handle(IPC.GIT_WORKTREE_CREATE, async (_e, projectPath: string, branch: string) =>
     route(projectPath).call('git.createWorktree', { projectPath, branch }))
 
@@ -658,11 +688,19 @@ async function loadWindowBounds(): Promise<Rect | null> {
 // forget the position. The file is one short line.
 function saveWindowBounds(win: BrowserWindow): void {
   try {
-    writeFileSync(join(app.getPath('userData'), WINDOW_STATE_FILE), `${JSON.stringify(win.getNormalBounds())}\n`)
+    const bounds = win.getNormalBounds()
+    // Never persist a panel-grown width: the changes panel's grow is a
+    // session-level accommodation, the user's own window size is what
+    // survives a restart (otherwise every launch opens panel-wide).
+    const width = bounds.width - (panelGrowOffset.get(win.id) ?? 0)
+    writeFileSync(join(app.getPath('userData'), WINDOW_STATE_FILE), `${JSON.stringify({ ...bounds, width })}\n`)
   } catch (err) {
     console.log(`[window-state] save failed: ${(err as Error).message}`)
   }
 }
+
+/** Per-window width the changes panel grew (session-only, see above). */
+const panelGrowOffset = new Map<number, number>()
 
 // ──────────────────────────────────────────────────────────────────────────
 // App lifecycle
@@ -704,6 +742,7 @@ async function createWindow(): Promise<void> {
   // pre-maximize size when the user quit in a zoomed/fullscreen window.
   const win = mainWindow
   win.on('close', () => saveWindowBounds(win))
+  win.on('closed', () => panelGrowOffset.delete(win.id))
   // External links open in the system browser, never in-app navigation.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('http://') || url.startsWith('https://')) {
