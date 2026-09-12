@@ -9,7 +9,7 @@ import { dirname, join } from 'node:path'
 import type { ProjectRecord } from '../src/types'
 import type { RuntimeAttachment } from '../contracts/daemon-protocol'
 import type { DaemonServer } from './server'
-import { piSessionRoot } from './sessions'
+import { piSessionRoot, sessionBucket } from './sessions'
 
 // Set once at registration (daemon/index.ts boot, before any call is served).
 let userData = ''
@@ -100,6 +100,28 @@ async function saveAppSessions(registry: Record<string, string[]>): Promise<void
   await writeJson(userDataFile(APP_SESSIONS_FILE), registry)
 }
 
+// First add of a project adopts its on-disk sessions as tracked, so the
+// sidebar's main list is populated on first contact instead of everything
+// landing in the collapsed archive group (which read as "loading forever").
+// One registry read + one write (never a per-file track loop). One-shot per
+// registry state: sessions other clients create later still fall into the
+// archive group by the untracked rule; re-adding after remove re-adopts
+// (remove drops the project's registry entry).
+async function adoptExistingSessions(projectPath: string): Promise<void> {
+  const registry = await loadAppSessions()
+  if (registry[projectPath]?.length) return
+  let files: string[]
+  try {
+    const dir = join(piSessionRoot(), sessionBucket(projectPath))
+    files = (await readdir(dir)).filter((n) => n.endsWith('.jsonl')).map((n) => join(dir, n))
+  } catch {
+    return // no session bucket yet — nothing to adopt
+  }
+  if (!files.length) return
+  registry[projectPath] = [...(registry[projectPath] ?? []), ...files]
+  await writeJson(userDataFile(APP_SESSIONS_FILE), registry)
+}
+
 /** Post-removal hook (kanban store teardown, wired by daemon/index.ts so
  * this module stays kanban-free). */
 let onProjectRemoved: ((id: string) => void) | null = null
@@ -172,7 +194,9 @@ export function registerProjectMethods(server: DaemonServer, userDataDir: string
   )
   server.register('projects.add', async (params) => {
     const { path } = params as { path: string }
-    return addProject(path)
+    const record = await addProject(path)
+    await adoptExistingSessions(path)
+    return record
   })
   server.register('projects.remove', async (params) => {
     const { id } = params as { id: string }
