@@ -95,6 +95,11 @@ export function useSessionPool() {
   sessionsRef.current = sessions
   const activeIdRef = useRef(activeId)
   activeIdRef.current = activeId
+  // Monotonic start counter: only the LATEST start may claim the foreground.
+  // A prewarm/draft spawn that resolves after the user opened a session must
+  // not steal activeId — its bare runtime has no sessionFile, so the view
+  // drops the selection and shows just its attach notices.
+  const startSeqRef = useRef(0)
   // The event subscription is registered once ([] deps); keep the latest
   // i18n for text composed inside it (completion notification).
   const i18nRef = useRef({ t, lang })
@@ -310,6 +315,7 @@ export function useSessionPool() {
   const start = useCallback(async (options: AgentStartOptions) => {
     setPendingStart(options)
     setError(null)
+    const startSeq = ++startSeqRef.current
     try {
       // Main reuses the pooled runtime when this session is already live, so
       // this returns immediately for a re-attach instead of respawning PI.
@@ -347,10 +353,12 @@ export function useSessionPool() {
         runtime: info,
         status: info.isStreaming ? 'running' : 'idle',
       })
-      setActiveId(info.runtimeId)
-      activeIdRef.current = info.runtimeId
-      // Foregrounding a freshly started/reattached session reads it as seen.
-      patchSession(info.runtimeId, (s) => (s.unread ? { ...s, unread: false } : s))
+      if (startSeqRef.current === startSeq) {
+        setActiveId(info.runtimeId)
+        activeIdRef.current = info.runtimeId
+        // Foregrounding a freshly started/reattached session reads it as seen.
+        patchSession(info.runtimeId, (s) => (s.unread ? { ...s, unread: false } : s))
+      }
       // A resumed session already holds usage on disk; don't make the ring wait
       // for the user's next turn.
       void refreshContextUsage(info.runtimeId)
@@ -382,6 +390,8 @@ export function useSessionPool() {
   // Foreground switch only; main is not involved. Clearing the unread badge
   // here covers every path that foregrounds an already-pooled session.
   const switchActive = useCallback((runtimeId: string) => {
+    // An explicit foreground switch outranks any start still in flight.
+    startSeqRef.current++
     setActiveId(runtimeId)
     patchSession(runtimeId, (s) => (s.unread ? { ...s, unread: false } : s))
   }, [patchSession])
