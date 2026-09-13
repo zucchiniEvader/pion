@@ -25,6 +25,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test:purity": "node scripts/run-purity-tests.mjs",
     "test:i18n": "node scripts/check-i18n-strings.mjs",
+    "test:terminal": "node scripts/build-daemon.mjs && node scripts/daemon-terminal-install.test.mjs && node scripts/daemon-terminal.test.mjs",
     "test:daemon": "node scripts/daemon-cli-test.mjs && node scripts/daemon-ws-test.mjs && node scripts/daemon-dial-test.mjs && node scripts/daemon-pairing-test.mjs",
     "daemon:package": "node scripts/package-daemon.mjs",
     "publish:daemon-github": "scripts/publish-daemon-github.sh",

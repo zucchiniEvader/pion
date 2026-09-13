@@ -11,6 +11,8 @@ mkdirSync(outDir, { recursive: true })
 const esbuild = join(root, 'node_modules', '.bin', 'esbuild')
 
 const suites = [
+  { entry: 'src/lib/pairingCommand.ts', bundle: 'pairingCommand.bundle.mjs', test: 'scripts/pairing-command.purity.test.mjs' },
+  { entry: 'src/i18n/user-error.ts', bundle: 'userError.bundle.mjs', test: 'scripts/user-error.purity.test.mjs' },
   { entry: 'src/lib/eventReducer.ts', bundle: 'eventReducer.bundle.mjs', test: 'scripts/event-reducer.purity.test.mjs' },
   { entry: 'src/lib/draftDecision.ts', bundle: 'draftDecision.bundle.mjs', test: 'scripts/draft-decision.purity.test.mjs' },
   { entry: 'src/lib/kanbanReducer.ts', bundle: 'kanbanReducer.bundle.mjs', test: 'scripts/kanban-reducer.purity.test.mjs' },

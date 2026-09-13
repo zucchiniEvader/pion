@@ -11,9 +11,9 @@
 # manifest.json, registers the auto-start service via `pion-daemon install`
 # and prints the Host/Port/Token block to paste into Pion's settings.
 # PION_NO_SERVICE=1 skips service registration; PION_LISTEN / PION_LISTEN_WS
-# override the listen addresses (<host:port>); PION_WITH_TERMINAL=1 also
-# npm-installs node-pty (native build toolchain required) to enable the
-# integrated terminal.
+# override the listen addresses (<host:port>). node-pty is installed by
+# default for the integrated terminal; PION_WITH_TERMINAL=0 skips it.
+# A native build toolchain may be required when no prebuild is available.
 set -eu
 
 DL_BASE="${PION_DL_BASE:-__DL_BASE__}"
@@ -104,21 +104,34 @@ esac
 
 command -v pi >/dev/null 2>&1 || say "    warn: 'pi' CLI not found in PATH — the daemon serves, but agent runtimes need pi installed on this machine"
 
-# Integrated terminal opt-in (daemon/terminal.ts lazily imports node-pty).
-# node-pty is native: needs a build toolchain on the remote, hence opt-in.
-# Installed into $PION_HOME/node_modules — node resolution from
-# $BIN_DIR/pion-daemon walks up to it.
-if [ "${PION_WITH_TERMINAL:-0}" = "1" ]; then
-  say "==> installing node-pty (integrated terminal; requires node-gyp toolchain)"
+# Install against the remote Node runtime, independently of Electron's ABI.
+# Resolution from $BIN_DIR/pion-daemon walks up to $PION_HOME/node_modules.
+# Do not npm init: the default directory name (.pion) is not a package name.
+if [ "${PION_WITH_TERMINAL:-1}" != "0" ]; then
+  say "==> installing node-pty (integrated terminal)"
   if command -v npm >/dev/null 2>&1; then
-    if (cd "$PION_HOME" && { [ -f package.json ] || npm init -y >/dev/null 2>&1; } && npm install --no-fund --no-audit node-pty); then
-      say "    node-pty installed — terminal enabled"
+    if npm install --prefix "$PION_HOME" --no-save --package-lock=false --no-fund --no-audit node-pty@1.1.0; then
+      if node -e '
+        const { createRequire } = require("node:module");
+        const pty = createRequire(process.argv[1])("node-pty");
+        const child = pty.spawn("/bin/sh", ["-c", "exit 0"], { env: process.env });
+        const timer = setTimeout(() => { child.kill(); process.exit(1); }, 5000);
+        child.onExit(({ exitCode }) => { clearTimeout(timer); process.exit(exitCode === 0 ? 0 : 1); });
+      ' "$BIN_DIR/pion-daemon"; then
+        say "    node-pty verified — terminal enabled"
+      else
+        say "    warn: node-pty installed but cannot start a terminal with this Node runtime"
+        say "    repair: npm rebuild --prefix \"$PION_HOME\" node-pty, then restart the daemon"
+      fi
     else
-      say "    warn: node-pty install failed — terminal will report err.terminal.unavailable"
+      say "    warn: node-pty install failed — integrated terminal unavailable"
+      say "    install a C/C++ build toolchain and Python, then rerun this installer"
     fi
   else
-    say "    warn: npm not found — skipping node-pty (terminal disabled)"
+    say "    warn: npm not found — install npm and rerun this installer to enable the terminal"
   fi
+else
+  say "==> skipping integrated terminal (PION_WITH_TERMINAL=0)"
 fi
 
 INSTALL_ARGS="--user-data $PION_HOME --resources $SHARE_DIR/resources"

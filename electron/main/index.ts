@@ -1,3 +1,4 @@
+import { buildPairingCommand } from '../../src/lib/pairingCommand'
 // Electron main: app lifecycle, BrowserWindow, IPC proxy layer to pion-daemon.
 import { app, BrowserWindow, ipcMain, dialog, shell, nativeTheme, screen, Notification } from 'electron'
 
@@ -463,7 +464,7 @@ function registerIpc(): void {
       const daemonFile = join(app.getPath('userData'), 'pion-daemon.cjs')
       await copyFile(srcBundle, daemonFile)
       daemons.setDaemonBundleFile(daemonFile)
-      const command = `curl -fsSL http://${hosts[0]}:${started.port}/pion-daemon.cjs -o pion-daemon.cjs && node pion-daemon.cjs --user-data ~/.pion --connect ${hosts[0]}:${started.port} --token ${started.token}`
+      const command = buildPairingCommand(hosts[0]!, started.port, started.token)
       return { ok: true, value: { port: started.port, token: started.token, hosts, command, daemonFile, expiresAt: started.expiresAt } }
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : String(err) }

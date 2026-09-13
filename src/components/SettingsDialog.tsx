@@ -1,3 +1,4 @@
+import { buildPairingCommand } from '@/lib/pairingCommand'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Box,
@@ -815,7 +816,7 @@ function RuntimesSection({ runtimes, onRefresh }: { runtimes: SettingsRuntime[];
   }, [runtimes, pairing, pairingBaseline, pairingDone])
 
   const pairingCommand = pairing
-    ? `curl -fsSL http://${pairingHost || pairing.hosts[0] || '127.0.0.1'}:${pairing.port}/pion-daemon.cjs -o pion-daemon.cjs && node pion-daemon.cjs --user-data ~/.pion --connect ${pairingHost || pairing.hosts[0] || '127.0.0.1'}:${pairing.port} --token ${pairing.token}`
+    ? buildPairingCommand(pairingHost || pairing.hosts[0] || '127.0.0.1', pairing.port, pairing.token)
     : ''
 
   const copyPairingCommand = async () => {

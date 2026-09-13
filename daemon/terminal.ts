@@ -28,7 +28,10 @@ type PtyModule = typeof import('node-pty')
 let ptyModule: Promise<PtyModule | null> | null = null
 
 function loadPty(): Promise<PtyModule | null> {
-  ptyModule ??= import('node-pty').catch(() => null)
+  ptyModule ??= import('node-pty').catch((error: unknown) => {
+    console.error('[terminal] Cannot load node-pty with this Node runtime:', error)
+    return null
+  })
   return ptyModule
 }
 
