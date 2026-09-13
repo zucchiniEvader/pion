@@ -1346,6 +1346,16 @@ function AboutSection({ meta }: { meta: AppMeta | null }) {
             >
               {t('settings.updates.restartToInstall')}
             </button>
+          ) : appUp?.state === 'unsupported' ? (
+            // Packaged in a form electron-updater can't update (Linux non-
+            // AppImage): link out instead of pretending to self-update.
+            <button
+              className="shrink-0 rounded-md border-[0.5px] border-line px-2 py-1 text-[10px] font-medium text-ink2 transition-colors hover:bg-fill-hover hover:text-ink"
+              title={t('settings.updates.viewReleases')}
+              onClick={() => void window.pi.app.openExternal(`${PROJECT_REPO_URL}/releases/latest`)}
+            >
+              {t('settings.updates.getFromGitHub')}
+            </button>
           ) : (
             <>
               <button

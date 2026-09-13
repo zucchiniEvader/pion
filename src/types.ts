@@ -173,9 +173,11 @@ export interface GuiUpdateInfo {
 }
 
 /** Self-update state machine (electron-updater, settings Updates). 'dev' =
- * unpackaged run, which can never self-update. */
+ * unpackaged run, which can never self-update. 'unsupported' = packaged in a
+ * form electron-updater can't update (Linux non-AppImage, e.g. deb) — the
+ * UI degrades to an "open releases page" link. */
 export interface AppUpdateStatus {
-  state: 'dev' | 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'
+  state: 'dev' | 'unsupported' | 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'
   /** Download progress 0..100 while state === 'downloading'. */
   percent?: number
   /** New version string once known. */

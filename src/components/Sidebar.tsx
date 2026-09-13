@@ -122,6 +122,12 @@ export function Sidebar({
   onNavBack,
   onNavForward,
 }: SidebarProps) {
+  // Shortcut hints follow the platform convention: ⌘ on the Mac build, Ctrl+
+  // elsewhere (meta.platform once meta arrives; navigator covers the first
+  // paint before it does — same detection as src/main.tsx's html.mac class).
+  const mod = meta?.platform
+    ? meta.platform === 'darwin' ? '⌘' : 'Ctrl+'
+    : /Mac/i.test(navigator.platform ?? '') || navigator.userAgent.includes('Macintosh') ? '⌘' : 'Ctrl+'
   // Which project groups are expanded; the active project follows selection.
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set())
   useEffect(() => {
@@ -220,11 +226,11 @@ export function Sidebar({
         <button
           className="flex h-9 w-full items-center gap-2.5 rounded-lg px-2 text-[13px] font-medium transition-colors hover:bg-fill-hover"
           onClick={onNewTask}
-          title={t('sidebar.newTaskTitle')}
+          title={t('sidebar.newTaskTitle', { mod })}
         >
           <SquarePen size={16} strokeWidth={1.75} className="shrink-0" />
           <span>{t('sidebar.newTask')}</span>
-          <span className="kbd ml-auto">⌘N</span>
+          <span className="kbd ml-auto">{mod}N</span>
         </button>
         {/* Scheduler entry below 新建任务: switches the main area to the
             scheduler surface (all projects' cron jobs + create form). */}

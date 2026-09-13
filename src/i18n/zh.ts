@@ -104,7 +104,7 @@ export const zh = {
 
   // —— Sidebar（项目/会话列表、页脚与更新面板）——
   'sidebar.newTask': '新建任务',
-  'sidebar.newTaskTitle': '新建任务 (⌘N)',
+  'sidebar.newTaskTitle': '新建任务 ({mod}N)',
   'sidebar.board': '任务看板',
   'sidebar.reviewBadgeTitle': '{count} 张卡片待审核',
   'sidebar.projects': '项目',
@@ -429,6 +429,7 @@ export const zh = {
   'settings.updates.downloadUpdate': '下载更新',
   'settings.updates.downloading': '下载中 {percent}%',
   'settings.updates.restartToInstall': '重启安装',
+  'settings.updates.getFromGitHub': '到 GitHub 下载',
   'settings.updates.upToDate': '全部为最新(上次检查 {time})',
   'settings.updates.checking': '正在检查更新…',
   'settings.updates.done': '更新完成',

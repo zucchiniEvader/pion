@@ -1,14 +1,23 @@
-// In-app auto-update (electron-updater + GitHub Releases, macOS Squirrel).
-// Feed config comes from electron-builder.yml `publish` (baked into
-// Resources/app-update.yml at package time) — nothing to configure here.
-// Dev/unpackaged runs report state 'dev' so the UI can degrade honestly.
+// In-app auto-update (electron-updater + GitHub Releases, macOS Squirrel /
+// Linux AppImage). Feed config comes from electron-builder.yml `publish`
+// (baked into Resources/app-update.yml at package time) — nothing to
+// configure here. Dev/unpackaged runs report state 'dev' so the UI can
+// degrade honestly.
 import { app, BrowserWindow, ipcMain } from 'electron'
 import electronUpdater from 'electron-updater'
 import { IPC, type AppUpdateStatus } from '../../src/types'
 
 const { autoUpdater } = electronUpdater
 
-let status: AppUpdateStatus = { state: app.isPackaged ? 'idle' : 'dev' }
+// electron-updater can only self-update an AppImage on Linux (it drives the
+// AppImage runtime through the APPIMAGE env var). deb & co must not pretend:
+// they report 'unsupported' and the UI links to the releases page instead.
+const selfUpdateSupported =
+  process.platform === 'darwin' || (process.platform === 'linux' && !!process.env.APPIMAGE)
+
+let status: AppUpdateStatus = !app.isPackaged
+  ? { state: 'dev' }
+  : selfUpdateSupported ? { state: 'idle' } : { state: 'unsupported' }
 
 function setStatus(next: AppUpdateStatus): void {
   status = next
@@ -17,6 +26,16 @@ function setStatus(next: AppUpdateStatus): void {
 
 export function initUpdater(): void {
   if (!app.isPackaged) return // dev builds can't self-update; UI shows nothing
+
+  ipcMain.handle(IPC.APP_UPDATE_STATUS, (): AppUpdateStatus => status)
+  if (!selfUpdateSupported) {
+    // Non-AppImage Linux: keep the handlers answering the honest
+    // 'unsupported' state — no feed probing, no fake errors.
+    ipcMain.handle(IPC.APP_UPDATE_CHECK, (): AppUpdateStatus => status)
+    ipcMain.handle(IPC.APP_UPDATE_DOWNLOAD, (): AppUpdateStatus => status)
+    ipcMain.handle(IPC.APP_UPDATE_INSTALL, (): void => {})
+    return
+  }
 
   autoUpdater.autoDownload = false // explicit user gesture (settings Updates)
   autoUpdater.autoInstallOnAppQuit = true
@@ -28,7 +47,6 @@ export function initUpdater(): void {
   autoUpdater.on('update-downloaded', (info) => setStatus({ state: 'downloaded', version: info.version }))
   autoUpdater.on('error', (err) => setStatus({ state: 'error', message: err.message }))
 
-  ipcMain.handle(IPC.APP_UPDATE_STATUS, (): AppUpdateStatus => status)
   ipcMain.handle(IPC.APP_UPDATE_CHECK, async (): Promise<AppUpdateStatus> => {
     if (status.state === 'downloaded') return status
     try {

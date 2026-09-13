@@ -100,7 +100,7 @@ export const en: Record<MsgKey, string> = {
 
   // —— Sidebar (projects/sessions, footer, updates panel) ——
   'sidebar.newTask': 'New task',
-  'sidebar.newTaskTitle': 'New task (⌘N)',
+  'sidebar.newTaskTitle': 'New task ({mod}N)',
   'sidebar.board': 'Task board',
   'sidebar.reviewBadgeTitle': '{count} card{s} awaiting review',
   'sidebar.projects': 'Projects',
@@ -426,6 +426,7 @@ export const en: Record<MsgKey, string> = {
   'settings.updates.downloadUpdate': 'Download update',
   'settings.updates.downloading': 'Downloading {percent}%',
   'settings.updates.restartToInstall': 'Restart to install',
+  'settings.updates.getFromGitHub': 'Get from GitHub',
   'settings.updates.upToDate': 'Everything up to date (checked {time})',
   'settings.updates.checking': 'Checking for updates…',
   'settings.updates.done': 'Update complete',
