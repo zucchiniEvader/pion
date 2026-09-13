@@ -497,7 +497,13 @@ export function Sidebar({
                                 archOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',
                               )}
                             >
-                              <ul className="min-h-0 space-y-0.5 overflow-hidden pb-1 pt-0.5">
+                              {/* The 0fr collapse only reaches 0 when the
+                                  grid child itself has no padding — the
+                                  border-box element can't shrink below it, so
+                                  pb/pt on this box would leak the top pixels
+                                  of the first archived row below the header. */}
+                              <div className="min-h-0 overflow-hidden">
+                                <ul className="space-y-0.5 pb-1 pt-0.5">
                                 {archivedTasks.map((s) => (
                                   <SessionRow
                                     key={s.id}
@@ -512,7 +518,8 @@ export function Sidebar({
                                     onUnarchive={onUnarchiveSession}
                                   />
                                 ))}
-                              </ul>
+                                </ul>
+                              </div>
                             </div>
                           </div>
                         )}
