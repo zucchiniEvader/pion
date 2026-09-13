@@ -1,6 +1,6 @@
 name: release
 
-# 推 tag（v0.1.0）触发：打 dmg（mac）+ AppImage/deb（Linux）→ 签名 + 公证（凭据来自 secrets）→ 发布 Release。
+# 推 tag（v0.1.0）触发：打 dmg（mac）+ AppImage/deb（Linux，x64 + arm64）→ 签名 + 公证（凭据来自 secrets）→ 发布 Release。
 # 应用内「检查更新」读的就是 releases/latest 的 tag，所以 tag 必须是 v<package.json version>，
 # 且发布后不能标成 prerelease，否则 GUI 永远认为已是最新。
 on:
@@ -34,13 +34,23 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
-  # Linux 产物（AppImage + deb，x64）：必须在 Linux 上构建——node-pty 的 .node
-  # 按平台/ABI 重编，ubuntu runner 自带编译链，postinstall 的 electron-rebuild 直接可用。
-  # 构建阶段同样不带 GH_TOKEN；上传要带全 latest-linux.yml + blockmap，否则
-  # AppImage 的应用内「检查更新」永远失败（deb 无自更新，UI 走下载链接降级，见 updater.ts）。
+  # Linux 产物（AppImage + deb）：必须在 Linux 上构建——node-pty 的 .node 按平台/ABI
+  # 重编，所以 x64/arm64 各在原生 runner 上出包（ubuntu-24.04-arm 是公共仓库免费的
+  # arm64 runner）。更新通道文件按架构命名且两端同规则：electron-builder 给 x64 生成
+  # latest-linux.yml、arm64 生成 latest-linux-arm64.yml，electron-updater 也按本机
+  # 架构查同名文件（Provider.getChannelFilePrefix）——两个 runner 产物互不重名、
+  # 各传各的，不存在互相 clobber，也不需要任何合并。
+  # fail-fast: false：一个架构失败不让另一个被取消；已传上去的通道文件保证
+  # 另一个架构的应用内更新照常工作。
   build-linux:
     needs: build # Release 由 build job 创建，排在其后避免 create 竞争
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest # x64
+          - runner: ubuntu-24.04-arm # arm64
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: write # gh release upload 需要
     steps:
@@ -51,7 +61,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run dist:linux
-      - run: gh release upload "$GITHUB_REF_NAME" release/*.AppImage release/*.AppImage.blockmap release/*.deb release/latest-linux.yml --clobber
+      # latest-linux*.yml 同时覆盖 latest-linux.yml 与 latest-linux-arm64.yml——
+      # 每个 runner 只生成自己架构的那份
+      - run: gh release upload "$GITHUB_REF_NAME" release/*.AppImage release/*.AppImage.blockmap release/*.deb release/latest-linux*.yml --clobber
         env:
           GH_TOKEN: ${{ github.token }}
 
