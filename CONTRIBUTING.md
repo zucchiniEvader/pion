@@ -27,6 +27,7 @@ npm run dev        # 开发模式
 | `npm run dist` | 打包 dmg |
 | `npm run dist:linux` | 打包 AppImage/deb（必须在 Linux 上跑：node-pty 按平台/ABI 重编；按当前机器架构出包，x64/arm64 均可。CI 的 release.yml 会出 x64 正式产物） |
 | `npm run dist:linux:dir` | Linux 免打包冒烟：`release/linux-<arch>-unpacked/pion` 直接可跑 |
+| `npm run dist:win` | 打包 NSIS exe（必须在 Windows 上跑，需要 VS Build Tools；未签名，SmartScreen 首启会拦。CI 的 release.yml 会出正式产物） |
 
 ## 先看哪里
 
