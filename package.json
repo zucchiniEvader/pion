@@ -32,7 +32,8 @@
     "postinstall": "node scripts/patch-dock-name.mjs && electron-rebuild -m node_modules/node-pty",
     "dist": "npm run build && electron-builder --mac --publish never",
     "dist:dir": "npm run build && electron-builder --mac --dir",
-    "dist:linux": "npm run build && electron-builder --linux --publish never"
+    "dist:linux": "npm run build && electron-builder --linux --publish never",
+    "dist:linux:dir": "npm run build && electron-builder --linux --dir"
   },
   "devDependencies": {
     "@base-ui/react": "^1.7.0",
