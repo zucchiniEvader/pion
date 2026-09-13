@@ -49,6 +49,17 @@ export function initUpdater(): void {
     return status
   })
   ipcMain.handle(IPC.APP_UPDATE_INSTALL, (): void => {
-    if (status.state === 'downloaded') autoUpdater.quitAndInstall()
+    if (status.state !== 'downloaded') return
+    autoUpdater.quitAndInstall()
+    // MacUpdater.quitAndInstall() silently no-ops while Squirrel is still
+    // staging the zip through its local proxy, and the native quit+install
+    // fails silently on some macOS versions (ShipIt/SMJobSubmit issues,
+    // electron#50866) — the button then does nothing and only a manual
+    // Cmd+Q installs via autoInstallOnAppQuit. Give the real path a beat;
+    // if no quit started, quit plainly: Squirrel installs the staged
+    // update on the way out (this path just doesn't auto-relaunch).
+    const fallback = setTimeout(() => app.quit(), 4000)
+    app.once('before-quit', () => clearTimeout(fallback))
+    fallback.unref()
   })
 }
