@@ -181,7 +181,13 @@ function piExecutableCandidates(env: NodeJS.ProcessEnv = process.env): string[] 
   // npm global bin — resolve via `npm config get prefix` would need a child,
   // so probe the conventional global locations instead.
   if (process.platform === 'win32') {
-    if (env.APPDATA) candidates.push(join(env.APPDATA, 'npm', 'pi.cmd'))
+    // npm global bin is the documented Windows install route (BootScreen);
+    // pi.exe covers a future native install.
+    if (env.APPDATA) {
+      candidates.push(join(env.APPDATA, 'npm', 'pi.cmd'))
+      candidates.push(join(env.APPDATA, 'npm', 'pi.exe'))
+    }
+    candidates.push(join(home, '.local', 'bin', 'pi.cmd'))
   } else {
     candidates.push('/usr/local/bin/pi')
     candidates.push('/opt/homebrew/bin/pi')
@@ -196,10 +202,13 @@ function piExecutableCandidates(env: NodeJS.ProcessEnv = process.env): string[] 
 async function whichFromPath(env: NodeJS.ProcessEnv): Promise<string | null> {
   const path = env.PATH ?? env.Path
   if (!path) return null
+  const names = process.platform === 'win32' ? ['pi.cmd', 'pi.exe'] : ['pi']
   for (const dir of path.split(process.platform === 'win32' ? ';' : ':')) {
     if (!dir) continue
-    const candidate = join(dir, process.platform === 'win32' ? 'pi.cmd' : 'pi')
-    if (await canAccess(candidate, fsConstants.X_OK)) return candidate
+    for (const name of names) {
+      const candidate = join(dir, name)
+      if (await canAccess(candidate, fsConstants.X_OK)) return candidate
+    }
   }
   return null
 }
