@@ -9,11 +9,12 @@ import { IPC, type AppUpdateStatus } from '../../src/types'
 
 const { autoUpdater } = electronUpdater
 
-// electron-updater can only self-update an AppImage on Linux (it drives the
-// AppImage runtime through the APPIMAGE env var). deb & co must not pretend:
-// they report 'unsupported' and the UI links to the releases page instead.
+// electron-updater self-update support by packaging form: mac (Squirrel zip)
+// and Windows (NSIS exe) always; Linux only an AppImage (driven through the
+// APPIMAGE env var). deb & co must not pretend: they report 'unsupported'
+// and the UI links to the releases page instead.
 const selfUpdateSupported =
-  process.platform === 'darwin' || (process.platform === 'linux' && !!process.env.APPIMAGE)
+  process.platform === 'darwin' || process.platform === 'win32' || (process.platform === 'linux' && !!process.env.APPIMAGE)
 
 let status: AppUpdateStatus = !app.isPackaged
   ? { state: 'dev' }
