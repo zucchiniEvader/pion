@@ -285,17 +285,17 @@ export function useSessionPool() {
         const s0 = sessionsRef.current.get(info.runtimeId)
         const hydrate = needsHistoryHydration(s0, info.sessionFile)
         if (hydrate && info.sessionFile) {
-          const replaceTail = (s0?.transcript.length ?? 0) > 0
           try {
             const { messages } = await window.pi.sessions.read(info.sessionFile, info.runtimeId)
             if (cancelled) return
             const hydrated = hydrateTranscript(messages)
-            // Live events may land during the read; they continue the same
-            // rows the disk tail holds, so replace (tail-only background
-            // entries) rather than only filling an empty transcript.
-            patchSession(info.runtimeId, (s) =>
-              s.transcript.length === 0 || replaceTail ? { ...s, transcript: hydrated } : s,
-            )
+            // Always replace: hydrate=true means the pool holds no real
+            // history, so anything streamed in during the read is attach
+            // noise (skill/status notices) or a tail the disk already
+            // holds. Gating on transcript length raced exactly that noise
+            // and dropped the whole history (notices became transcript rows
+            // in e8dcbce, which is what made this visible).
+            patchSession(info.runtimeId, (s) => ({ ...s, transcript: hydrated }))
           } catch {
             /* best-effort; live events will still stream in */
           }
@@ -321,7 +321,6 @@ export function useSessionPool() {
       // review-comment forward / background dispatch — materializes from
       // bare events and holds only the streamed tail, never the history).
       const shouldHydrate = needsHistoryHydration(existing, options.sessionPath)
-      const replaceTail = shouldHydrate && existing != null && existing.transcript.length > 0
       setSessions((prev) => {
         const next = new Map(prev)
         const s = next.get(info.runtimeId) ?? defaultSessionState()
@@ -359,14 +358,9 @@ export function useSessionPool() {
         try {
           const { messages } = await window.pi.sessions.read(options.sessionPath, info.runtimeId)
           const hydrated = hydrateTranscript(messages)
-          // Live events may have landed during the read; when the entry was
-          // background-only they are a tail the disk already contains —
-          // replace with full history; otherwise memory stays newer.
-          patchSession(info.runtimeId, (s) =>
-            s.transcript.length === 0 || replaceTail
-              ? { ...s, transcript: hydrated, hydrating: false }
-              : { ...s, hydrating: false },
-          )
+          // Always replace with full history (same race as the adopt path
+          // above): a notice landing during the read used to void it.
+          patchSession(info.runtimeId, (s) => ({ ...s, transcript: hydrated, hydrating: false }))
         } catch {
           /* best-effort; live events will still stream in */
           patchSession(info.runtimeId, (s) => ({ ...s, hydrating: false }))
