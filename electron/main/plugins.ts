@@ -16,7 +16,7 @@ import { IPC, type CommunityPackage, type UpdateProgressEvent } from '../../src/
 const SEARCH_URL = 'https://registry.npmjs.org/-/v1/search'
 const FETCH_TIMEOUT_MS = 10_000
 const CACHE_TTL_MS = 10 * 60 * 1000
-const PAGE_SIZE = 100
+const PAGE_SIZE = 20
 
 // pi.dev/packages lists every npm package tagged `pi-package`; this is the
 // same data via the registry's search API. Server-side text search narrows it.

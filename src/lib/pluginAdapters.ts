@@ -121,6 +121,13 @@ export const PLUGIN_ADAPTERS: readonly PluginAdapter[] = [
   },
 ]
 
+/** Exact npm identities only: similarly named community packages are not adapted. */
+export function pionPluginAdaptation(name: string): 'ui' | 'commands' | null {
+  const packageName = name.replace(/^npm:/, '')
+  if (['@juicesharp/rpiv-todo', '@narumitw/pi-plan-mode', '@narumitw/pi-goal'].includes(packageName)) return 'ui'
+  return PLUGIN_ADAPTERS.some((adapter) => adapter.id === `npm:${packageName}`) ? 'commands' : null
+}
+
 export interface ArgumentCompletionResult {
   adapter: PluginAdapter
   /** The command name as the runtime spells it (the draft may be "/MCP …"). */
