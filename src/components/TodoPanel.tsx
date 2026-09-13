@@ -21,7 +21,7 @@ function StatusIcon({ status }: { status: TodoItem['status'] }) {
 }
 
 export function TodoPanel({ todos }: { todos: TodoItem[] }) {
-  const [collapsed, setCollapsed] = useState(false)
+  const [collapsed, setCollapsed] = useState(true)
   const { t } = useI18n()
   if (todos.length === 0) return null
   const doneCount = todos.filter((t) => t.status === 'completed').length

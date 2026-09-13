@@ -770,7 +770,10 @@ export default function App() {
             the live session, docked at the bottom the whole time. mt-auto
             pins it down even when no flex-1 surface (hero/transcript) is
             mounted above — the session-switch/load gap windows. */}
-        <TodoPanel todos={todos} />
+        {/* The start/hydration window still points at the PREVIOUS session's
+            pool entry, whose todos would linger above the composer mid-switch
+            (the transcript above already hides on the same guards). */}
+        {!pool.pendingStart && !active?.hydrating && <TodoPanel todos={todos} />}
         <div className="relative mt-auto shrink-0">
             {/* Question-style prompts float above the composer; modal
                 prompts portal out of this layer to the screen center. */}
