@@ -150,12 +150,30 @@ async function openInApp(appName: string, bundleName: string, dirPath: string): 
     })
     return
   }
-  // Linux: prefer the app's own CLI, fall back to xdg-open (file manager);
-  // every failure stays silent, like the mac open -a fallback.
-  const attempts: Array<[string, string[]]> = []
-  if (bundleName === 'Ghostty.app') attempts.push(['ghostty', [`--working-directory=${dirPath}`]])
-  else if (bundleName === 'Visual Studio Code.app') attempts.push(['code', [dirPath]])
-  attempts.push(['xdg-open', [dirPath]])
+  // Per-platform attempts, each falling back to the next; every failure stays
+  // silent, like the mac open -a fallback.
+  let attempts: Array<[string, string[]]>
+  if (process.platform === 'win32') {
+    // The "Ghostty" slot maps to Windows Terminal (wt's app-execution alias
+    // spawns fine from Node); "VS Code" runs through cmd because npm installs
+    // it as a .cmd shim, which spawn refuses to exec directly.
+    attempts =
+      bundleName === 'Ghostty.app'
+        ? [
+            ['wt.exe', ['-d', dirPath]],
+            ['explorer.exe', [dirPath]],
+          ]
+        : [
+            ['cmd.exe', ['/d', '/s', '/c', `code "${dirPath}"`]],
+            ['explorer.exe', [dirPath]],
+          ]
+  } else {
+    // Linux: prefer the app's own CLI, fall back to xdg-open (file manager).
+    attempts = []
+    if (bundleName === 'Ghostty.app') attempts.push(['ghostty', [`--working-directory=${dirPath}`]])
+    else if (bundleName === 'Visual Studio Code.app') attempts.push(['code', [dirPath]])
+    attempts.push(['xdg-open', [dirPath]])
+  }
   await new Promise<void>((resolve) => {
     const next = (i: number): void => {
       if (i >= attempts.length) return resolve()
@@ -866,7 +884,11 @@ let parentWatcher: NodeJS.Timeout | null = null
 function startParentWatcher(): void {
   if (parentWatcher || process.platform === 'darwin') return
   parentWatcher = setInterval(() => {
-    if (process.ppid !== parentPid || !isAlive(process.ppid)) {
+    // Windows never re-parents and recycles pids, so "ppid changed" is
+    // meaningless there — poll the ORIGINAL parent's liveness instead
+    // (pid-reuse false-positives remain; a Job Object would be the exact fix).
+    const dead = process.platform === 'win32' ? !isAlive(parentPid) : process.ppid !== parentPid || !isAlive(process.ppid)
+    if (dead) {
       // Parent gone (re-parented or killed): quit without leaving orphans.
       app.quit()
     }
@@ -893,6 +915,9 @@ app.whenReady().then(async () => {
   // keeps the default menu: its bar lives in the system menu bar and carries
   // the standard roles (copy/paste/quit accelerators).
   if (process.platform !== 'darwin') Menu.setApplicationMenu(null)
+  // Windows toasts are keyed on the AppUserModelId — without this the
+  // Notification.isSupported() path silently never fires.
+  if (process.platform === 'win32') app.setAppUserModelId('com.pion.app')
   startParentWatcher()
   if (process.platform === 'darwin') {
     app.dock?.setIcon(join(app.getAppPath(), 'assets', 'pion-logo.png'))
