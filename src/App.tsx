@@ -285,9 +285,12 @@ export default function App() {
   // In-flight/finished prewarm of the new-task page: the draft's PI runtime
   // starts in the background so models load and the first send is instant.
   const prewarmRef = useRef<Promise<RuntimeInfo | null> | null>(null)
-  // The one persistent composer's text and focus signal — the composer is
-  // never remounted across draft → spawning → live transitions.
-  const [draft, setDraft] = useState('')
+  // Per-view composer drafts + focus signal. The composer itself is never
+  // remounted across draft → spawning → live transitions, so a SINGLE draft
+  // string would leak text typed for session A into session B — the map is
+  // what switches with the view. Key (below): session file path, or
+  // `new:<projectPath>` for the new-task/landing draft. Empty entries drop.
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [composerFocus, setComposerFocus] = useState(0)
 
   const newSession = useCallback(() => {
@@ -494,6 +497,23 @@ export default function App() {
     active,
     pool.pendingStart?.sessionPath,
   )
+
+  // The composer draft for the CURRENT view (see the drafts map above).
+  // Landing without a session also counts as the new-task slot, so starter
+  // chips and a later 新建任务 share one buffer.
+  const draftKey = !composingNew && activeSessionPath ? activeSessionPath : `new:${activeProject?.path ?? ''}`
+  const draft = drafts[draftKey] ?? ''
+  const setDraft = useCallback((text: string) => {
+    setDrafts((prev) => {
+      if (text === '') {
+        if (!(draftKey in prev)) return prev
+        const next = { ...prev }
+        delete next[draftKey]
+        return next
+      }
+      return prev[draftKey] === text ? prev : { ...prev, [draftKey]: text }
+    })
+  }, [draftKey])
 
   // Back/forward over view transitions (session ↔ board ↔ home). A location
   // is just the two top-level states; entries whose session has since been
