@@ -142,10 +142,27 @@ async function rehydrateAfterReconnect(runtimeId: string): Promise<void> {
 
 async function openInApp(appName: string, bundleName: string, dirPath: string): Promise<void> {
   const { execFile } = await import('node:child_process')
-  await new Promise<void>((resolve) => {
-    execFile('open', ['-a', appName, dirPath], { timeout: 10_000 }, () => {
-      execFile('open', ['-b', bundleName, dirPath], { timeout: 10_000 }, () => resolve())
+  if (process.platform === 'darwin') {
+    await new Promise<void>((resolve) => {
+      execFile('open', ['-a', appName, dirPath], { timeout: 10_000 }, () => {
+        execFile('open', ['-b', bundleName, dirPath], { timeout: 10_000 }, () => resolve())
+      })
     })
+    return
+  }
+  // Linux: prefer the app's own CLI, fall back to xdg-open (file manager);
+  // every failure stays silent, like the mac open -a fallback.
+  const attempts: Array<[string, string[]]> = []
+  if (bundleName === 'Ghostty.app') attempts.push(['ghostty', [`--working-directory=${dirPath}`]])
+  else if (bundleName === 'Visual Studio Code.app') attempts.push(['code', [dirPath]])
+  attempts.push(['xdg-open', [dirPath]])
+  await new Promise<void>((resolve) => {
+    const next = (i: number): void => {
+      if (i >= attempts.length) return resolve()
+      const [bin, args] = attempts[i]!
+      execFile(bin, args, { timeout: 10_000 }, () => next(i + 1))
+    }
+    next(0)
   })
 }
 
