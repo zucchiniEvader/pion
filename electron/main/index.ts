@@ -1,6 +1,6 @@
 import { buildPairingCommand } from '../../src/lib/pairingCommand'
 // Electron main: app lifecycle, BrowserWindow, IPC proxy layer to pion-daemon.
-import { app, BrowserWindow, ipcMain, dialog, shell, nativeTheme, screen, Notification } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, Menu, shell, nativeTheme, screen, Notification } from 'electron'
 
 // Dev mode on Windows/Linux derives the app name from the binary ("electron");
 // macOS dev uses the patched Info.plist (scripts/patch-dock-name.mjs). Set it
@@ -888,6 +888,11 @@ app.whenReady().then(async () => {
   // with a "checking" screen on the way in. A missing pi is not cached, so the
   // setup page's 重新检测 still probes fresh.
   void detectPi().catch(() => {})
+  // The app defines no menu of its own, so Electron's default (File/Edit/View/
+  // Window) renders INSIDE the window on Linux/Windows — drop it there. macOS
+  // keeps the default menu: its bar lives in the system menu bar and carries
+  // the standard roles (copy/paste/quit accelerators).
+  if (process.platform !== 'darwin') Menu.setApplicationMenu(null)
   startParentWatcher()
   if (process.platform === 'darwin') {
     app.dock?.setIcon(join(app.getAppPath(), 'assets', 'pion-logo.png'))
