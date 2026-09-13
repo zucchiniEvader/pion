@@ -25,6 +25,7 @@ npm run dev        # 开发模式
 | `npm run test:daemon` | daemon 协议 / CLI / 配对测试 |
 | `npm run dist:dir` | 快速产出 `release/mac-arm64/Pion.app` |
 | `npm run dist` | 打包 dmg |
+| `npm run dist:linux` | 打包 AppImage/deb（必须在 Linux 上跑：node-pty 按平台/ABI 重编；CI 的 release.yml 会出正式产物） |
 
 ## 先看哪里
 
