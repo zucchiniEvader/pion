@@ -4,6 +4,7 @@
 //   pion-daemon                  shebang bundle (pure JS, node >= 18)
 //   resources/*.ts               bundled extensions → ~/.pion/share on install
 //   install.sh / uninstall.sh    one-line installers (__DL_BASE__ baked via --dl-base)
+//   install.ps1                  Windows installer (same bake + sha256 checks)
 //   manifest.json                version + sha256 + size per file (install.sh verifies)
 //
 // Usage: node scripts/package-daemon.mjs [--dl-base https://dl.example] [--skip-build]
@@ -41,7 +42,7 @@ chmodSync(join(OUT, 'pion-daemon'), 0o755)
 copyFileSync('resources/kanban-bridge.ts', join(OUT, 'resources', 'kanban-bridge.ts'))
 copyFileSync('resources/pion-commands.ts', join(OUT, 'resources', 'pion-commands.ts'))
 
-for (const script of ['install.sh', 'uninstall.sh']) {
+for (const script of ['install.sh', 'uninstall.sh', 'install.ps1']) {
   const body = readFileSync(join('scripts', script), 'utf8')
   writeFileSync(join(OUT, script), body.replaceAll('__DL_BASE__', DL_BASE), { mode: 0o755 })
 }
