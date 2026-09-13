@@ -7,10 +7,10 @@
 // node-pty is native and the daemon ships as a single-file bundle, so it is
 // loaded LAZILY: a daemon without node-pty installed nearby stays fully
 // alive and its terminal methods fail with err.terminal.unavailable.
-import { existsSync } from 'node:fs'
 import type { TerminalAttachResult } from '../src/types'
 import type { DaemonServer } from './server'
 import { assertProjectDirectory } from './git'
+import { resolveShell } from './resolve-shell'
 
 interface TermEntry {
   pty: {
@@ -41,18 +41,6 @@ function cleanEnv(): Record<string, string> {
     if (v !== undefined && k !== 'ELECTRON_RUN_AS_NODE') out[k] = v
   }
   return out
-}
-
-/** Login shell that exists on THIS machine (a Linux remote may lack zsh). */
-function resolveShell(): { shell: string; args: string[] } {
-  const fromEnv = process.env.SHELL?.trim()
-  for (const candidate of [fromEnv, '/bin/zsh', '/bin/bash']) {
-    if (candidate && existsSync(candidate)) {
-      const base = candidate.split('/').pop() ?? ''
-      return { shell: candidate, args: base === 'zsh' || base === 'bash' ? ['-l'] : [] }
-    }
-  }
-  return { shell: '/bin/sh', args: [] }
 }
 
 function assertDimension(value: unknown, name: string): number {

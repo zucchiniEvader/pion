@@ -10,6 +10,7 @@
 import { ipcMain, type BrowserWindow } from 'electron'
 import { existsSync, statSync } from 'node:fs'
 import { spawn, type IPty } from 'node-pty'
+import { resolveShell } from '../../daemon/resolve-shell'
 import { IPC } from '../../src/types'
 import type { DaemonConnection } from './daemon-client'
 
@@ -70,8 +71,8 @@ export function registerTerminalHandlers(getWindow: () => BrowserWindow | null, 
     assertUsableDir(projectPath)
     const existing = terminals.get(projectPath)
     if (existing) return { buffer: existing.buffer }
-    const shell = process.env.SHELL?.trim() || '/bin/zsh'
-    const pty = spawn(shell, ['-l'], {
+    const { shell, args } = resolveShell()
+    const pty = spawn(shell, args, {
       name: 'xterm-256color',
       cols: 120,
       rows: 30,
