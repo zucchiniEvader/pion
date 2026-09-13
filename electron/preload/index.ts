@@ -13,6 +13,7 @@ import type {
   GitOverview,
   GitFileDiff,
   GitStatusResult,
+  FsFileList,
   WorktreeCreated,
   PiGuiApi,
   CardStatus,
@@ -277,6 +278,9 @@ const api: PiGuiApi = {
     fileDiff: (projectPath, path) =>
       invoke<GitFileDiff>(IPC.GIT_FILE_DIFF, assertProjectPath(projectPath), assertNonEmptyString(path, 'path', 4096)),
     createWorktree: (projectPath, branch) => invoke<WorktreeCreated>(IPC.GIT_WORKTREE_CREATE, projectPath, branch),
+  },
+  fs: {
+    listFiles: (projectPath) => invoke<FsFileList>(IPC.FS_LIST_FILES, assertProjectPath(projectPath)),
   },
   projects: {
     list: () => invoke<ProjectRecord[]>(IPC.PROJECTS_LIST),

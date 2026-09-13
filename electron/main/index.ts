@@ -395,6 +395,15 @@ function registerIpc(): void {
     route(projectPath).call('git.fileDiff', { projectPath, path }))
   ipcMain.handle(IPC.GIT_WORKTREE_CREATE, async (_e, projectPath: string, branch: string) =>
     route(projectPath).call('git.createWorktree', { projectPath, branch }))
+  ipcMain.handle(IPC.FS_LIST_FILES, async (_e, projectPath: string) =>
+    route(projectPath)
+      .call('fs.listFiles', { projectPath })
+      .catch((e) => {
+        // Same v3-additive fallback as git.changedFiles: a remote daemon
+        // predating this method makes the @ picker empty, not error-bannered.
+        if (/unknown method/.test(e instanceof Error ? e.message : String(e))) return { files: [], truncated: false }
+        throw e
+      }))
 
   // ── Settings: runtime registry (④ R2-A) ──
   ipcMain.handle(IPC.SETTINGS_LIST, async (): Promise<SettingsRuntime[]> => {

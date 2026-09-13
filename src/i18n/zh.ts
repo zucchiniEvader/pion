@@ -169,6 +169,8 @@ export const zh = {
   'composer.pickProjectFolder': '选择项目文件夹…',
   'composer.loadingCommands': '加载命令…',
   'composer.noCommands': '无匹配命令',
+  'composer.loadingFiles': '加载文件…',
+  'composer.noFiles': '无匹配文件',
   'composer.sourceExtension': '扩展',
   'composer.sourcePrompt': '模板',
   'composer.sourceSkill': '技能',

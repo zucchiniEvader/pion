@@ -16,6 +16,7 @@ import { registerSessionMethods } from './sessions'
 import { registerAgentMethods, shutdownAgent, ensurePrewarm } from './agent'
 import { registerKanbanMethods, stopKanbanStore, shutdownKanban } from './kanban'
 import { registerGitMethods } from './git'
+import { registerFsMethods } from './files'
 import { registerVersionCheckMethods, stopPiUpdate } from './version-check'
 import { registerSettingsMethods } from './settings'
 import { registerCronMethods } from './cron'
@@ -149,6 +150,7 @@ export async function runDaemon(opts: BootOptions): Promise<void> {
   registerAgentMethods(server, resources)
   registerKanbanMethods(server, userData, resources)
   registerGitMethods(server)
+  registerFsMethods(server)
   registerVersionCheckMethods(server, userData)
   registerSettingsMethods(server)
   registerCronMethods(server, userData)

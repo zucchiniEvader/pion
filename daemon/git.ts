@@ -59,7 +59,7 @@ function resolveGit(): Promise<string | null> {
 // One-shot execution
 // ──────────────────────────────────────────────────────────────────────────
 
-function runGit(cwd: string, args: string[], okExitCodes: number[] = [0]): Promise<string> {
+export function runGit(cwd: string, args: string[], okExitCodes: number[] = [0]): Promise<string> {
   return resolveGit().then((exe) => {
     if (!exe) return Promise.reject(new Error('未找到 git 可执行文件。'))
     return new Promise((resolve, reject) => {

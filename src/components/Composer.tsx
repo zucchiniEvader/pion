@@ -3,11 +3,12 @@ import type { ContextUsage, PiAvailableModel, PiCommandInfo, ProjectRecord, Prom
 import type { RuntimeStatus } from '@/hooks/useSessionPool'
 import { cn } from '@/lib/utils'
 import { argumentCompletions } from '@/lib/pluginAdapters'
+import { applyFileMention, findFileMention, rankFileMentions } from '@/lib/fileMentions'
 import { useI18n, useUserErrorMessage } from '@/i18n'
 import type { MsgKey } from '@/i18n/zh'
 import { Input } from '@/components/ui/input'
 import { openImagePreview } from '@/components/ImageLightbox'
-import { ArrowUp, Brain, Check, ChevronDown, Compass, Cpu, Folder, FolderOpen, LoaderCircle, Square, X } from 'lucide-react'
+import { ArrowUp, Brain, Check, ChevronDown, Compass, Cpu, FileText, Folder, FolderOpen, LoaderCircle, Square, X } from 'lucide-react'
 
 const FALLBACK_THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'max']
 
@@ -397,15 +398,56 @@ export function Composer({
   type PopupItem =
     | { kind: 'command'; command: PiCommandInfo }
     | { kind: 'argument'; value: string; label: string; description?: string }
-  const popupItems: PopupItem[] = slashMatch
-    ? slashItems.map((command) => ({ kind: 'command' as const, command }))
-    : (argCompletion?.items ?? []).map((item) => ({
-        kind: 'argument' as const,
-        value: item.value,
-        label: item.label ?? item.value,
-        description: item.description,
-      }))
+    | { kind: 'file'; path: string }
+
+  // ── @ file mention ─────────────────────────────────────────────────────
+  // Typing "@<query>" opens the same popup with project files (pi TUI parity:
+  // the picked BARE PATH is inserted, no content expansion — pi's tools strip
+  // a leading @ and read the file themselves). The daemon's fs.listFiles
+  // returns the whole project once; ranking runs client-side per keystroke.
+  const [cursor, setCursor] = useState(0)
+  const projectPath = activeProject?.path ?? null
+  // Unlike the slash popup this needs no runtime: the list comes from the
+  // daemon, so it works in draft mode before pi has even spawned.
+  const mentionReady = !slashDismissed && !running && !stopping && !starting && projectPath !== null
+  const mention = mentionReady ? findFileMention(draft, cursor) : null
+  const [fileCache, setFileCache] = useState<{ path: string; files: string[] } | null>(null)
+  useEffect(() => {
+    setFileCache(null)
+  }, [projectPath])
+  const wantsFiles = mention !== null
+  useEffect(() => {
+    if (!wantsFiles || !projectPath || fileCache?.path === projectPath) return
+    let cancelled = false
+    window.pi.fs
+      .listFiles(projectPath)
+      .then((r) => {
+        if (!cancelled) setFileCache({ path: projectPath, files: r.files })
+      })
+      .catch(() => {
+        if (!cancelled) setFileCache({ path: projectPath, files: [] })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [wantsFiles, projectPath, fileCache])
+  // Null while the daemon call is in flight.
+  const fileItems = mention && fileCache?.path === projectPath ? rankFileMentions(fileCache.files, mention.query) : null
+
+  const popupItems: PopupItem[] = mention
+    ? (fileItems ?? []).map((path) => ({ kind: 'file' as const, path }))
+    : slashMatch
+      ? slashItems.map((command) => ({ kind: 'command' as const, command }))
+      : (argCompletion?.items ?? []).map((item) => ({
+          kind: 'argument' as const,
+          value: item.value,
+          label: item.label ?? item.value,
+          description: item.description,
+        }))
   const popupIndex = popupItems.length ? Math.min(slashHighlight, popupItems.length - 1) : 0
+  useEffect(() => {
+    setSlashHighlight(0)
+  }, [mention?.query])
 
   // A new runtime carries its own command registry; typing re-arms the
   // popup after an Escape dismissal.
@@ -458,8 +500,18 @@ export function Composer({
     onDraftChange(`/${[argCompletion.command, ...argCompletion.completed, value].join(' ')} `)
   }
 
+  // Accepting a file swaps the @query token for the bare path and parks the
+  // cursor after it (the draft state lives one render up, hence the rAF).
+  const acceptFile = (path: string): void => {
+    if (!mention) return
+    const next = applyFileMention(draft, mention, path)
+    onDraftChange(next.text)
+    requestAnimationFrame(() => inputRef.current?.setSelectionRange(next.cursor, next.cursor))
+  }
+
   const acceptPopupItem = (item: PopupItem): void => {
     if (item.kind === 'command') acceptSlashItem(item.command)
+    else if (item.kind === 'file') acceptFile(item.path)
     else acceptArgument(item.value)
   }
 
@@ -551,14 +603,14 @@ export function Composer({
           ))}
         </div>
         <div className="relative">
-          {(slashMatch || argCompletion) && (
+          {(slashMatch || argCompletion || mention) && (
             <div className="pop-card absolute bottom-full left-0 z-30 mb-1.5 max-h-72 w-[420px] overflow-y-auto p-1">
-              {slashMatch && commands === null ? (
+              {(slashMatch && commands === null) || (mention && fileItems === null) ? (
                 <p className="flex items-center gap-1.5 px-2.5 py-2 text-xs text-ink2">
-                  <LoaderCircle size={11} className="animate-spin" /> {t('composer.loadingCommands')}
+                  <LoaderCircle size={11} className="animate-spin" /> {mention ? t('composer.loadingFiles') : t('composer.loadingCommands')}
                 </p>
               ) : popupItems.length === 0 ? (
-                <p className="px-2.5 py-2 text-xs text-ink2">{t('composer.noCommands')}</p>
+                <p className="px-2.5 py-2 text-xs text-ink2">{mention ? t('composer.noFiles') : t('composer.noCommands')}</p>
               ) : (
                 <>
                   {/* Argument candidates come from Pion's own table for that
@@ -592,6 +644,19 @@ export function Composer({
                           {item.command.source === 'extension' ? t('composer.sourceExtension') : item.command.source === 'prompt' ? t('composer.sourcePrompt') : t('composer.sourceSkill')}
                         </span>
                       </button>
+                    ) : item.kind === 'file' ? (
+                      <button
+                        key={`f:${item.path}`}
+                        className={cn(
+                          'flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs text-ink transition-colors',
+                          i === popupIndex ? 'bg-fill-hover' : 'hover:bg-fill-hover',
+                        )}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => acceptFile(item.path)}
+                      >
+                        <FileText size={13} strokeWidth={1.75} className="shrink-0 text-ink2" />
+                        <span className="min-w-0 flex-1 truncate font-medium">{item.path}</span>
+                      </button>
                     ) : (
                       <button
                         key={`a:${item.value}`}
@@ -622,7 +687,11 @@ export function Composer({
                   ? t('composer.placeholderRunning')
                   : t('composer.placeholderLive')
             }
-            onChange={(e) => onDraftChange(e.target.value)}
+            onChange={(e) => {
+              setCursor(e.target.selectionStart)
+              onDraftChange(e.target.value)
+            }}
+            onSelect={(e) => setCursor(e.currentTarget.selectionStart)}
             onKeyDown={onKeyDown}
             onPaste={onPaste}
             rows={2}

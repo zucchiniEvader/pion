@@ -10,6 +10,7 @@ import type {
   AuthStateResult,
   CronCreateInput,
   CronJob,
+  FsFileList,
   GitFileDiff,
   GitOverview,
   GitStatusResult,
@@ -281,6 +282,11 @@ export interface DaemonMethodMap {
   'git.changedFiles': { params: { projectPath: string }; result: GitStatusResult }
   /** v3 additive: unified diff of one changed path (panel drill-down). */
   'git.fileDiff': { params: { projectPath: string; path: string }; result: GitFileDiff }
+
+  // fs
+  /** v3 additive (same rule as git.changedFiles): project-relative file list
+   * for the composer's @ file mention picker; old daemons answer not_found. */
+  'fs.listFiles': { params: { projectPath: string }; result: FsFileList }
 
   // terminal (v3 additive): daemon-side pty host for REMOTE runtimes — the
   // local terminal stays client-local in Electron main. node-pty is loaded

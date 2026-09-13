@@ -164,6 +164,8 @@ export const en: Record<MsgKey, string> = {
   'composer.pickProjectFolder': 'Choose project folder…',
   'composer.loadingCommands': 'Loading commands…',
   'composer.noCommands': 'No matching commands',
+  'composer.loadingFiles': 'Loading files…',
+  'composer.noFiles': 'No matching files',
   'composer.sourceExtension': 'Ext',
   'composer.sourcePrompt': 'Template',
   'composer.sourceSkill': 'Skill',

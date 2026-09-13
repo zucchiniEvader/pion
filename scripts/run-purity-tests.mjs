@@ -21,6 +21,7 @@ const suites = [
   { entry: 'src/lib/reltime.ts', bundle: 'reltime.bundle.mjs', test: 'scripts/reltime.purity.test.mjs' },
   { entry: 'src/lib/piVersion.ts', bundle: 'piVersion.bundle.mjs', test: 'scripts/pi-version.purity.test.mjs' },
   { entry: 'src/lib/pluginAdapters.ts', bundle: 'pluginAdapters.bundle.mjs', test: 'scripts/plugin-adapters.purity.test.mjs' },
+  { entry: 'src/lib/fileMentions.ts', bundle: 'fileMentions.bundle.mjs', test: 'scripts/file-mentions.purity.test.mjs' },
   { entry: 'daemon/pi-rpc.ts', bundle: 'piRpc.bundle.mjs', test: 'scripts/nvm-versions.purity.test.mjs' },
   { entry: 'daemon/cron-schedule.ts', bundle: 'cronSchedule.bundle.mjs', test: 'scripts/cron-schedule.purity.test.mjs' },
   { entry: 'daemon/git-status.ts', bundle: 'gitStatus.bundle.mjs', test: 'scripts/git-status.purity.test.mjs' },

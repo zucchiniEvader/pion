@@ -49,6 +49,8 @@ export const IPC = {
   GIT_CHANGED_FILES: 'git:changed-files',
   /** Unified diff of one changed file (changes panel drill-down). */
   GIT_FILE_DIFF: 'git:file-diff',
+  /** Project-relative file list for the composer @ file mention picker. */
+  FS_LIST_FILES: 'fs:list-files',
   // projects (recent)
   PROJECTS_LIST: 'projects:list',
   PROJECTS_ADD: 'projects:add',
@@ -347,6 +349,14 @@ export interface GitFileDiff {
   path: string
   diff: string
   /** Output was cut at the daemon's line cap. */
+  truncated: boolean
+}
+
+/** Project-relative file list for the composer's @ file mention picker.
+ * `truncated` marks the daemon's cap (huge repos): ranking then runs over a
+ * path-ordered prefix, so very deep paths may be missing. */
+export interface FsFileList {
+  files: string[]
   truncated: boolean
 }
 
@@ -812,6 +822,11 @@ export interface PiGuiApi {
     /** Unified diff for one path from changedFiles (untrusted input — the
      * daemon validates it stays inside the project). */
     fileDiff: (projectPath: string, path: string) => Promise<GitFileDiff>
+  }
+  fs: {
+    /** Project-relative file list backing the composer's @ file mention
+     * picker. Cached by the composer per project. */
+    listFiles: (projectPath: string) => Promise<FsFileList>
   }
   projects: {
     list: () => Promise<ProjectRecord[]>
