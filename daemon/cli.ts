@@ -5,8 +5,8 @@
 //
 //   serve      resident listener mode driven by a persisted config
 //              (<userData>/daemon-config.json: token + ports, mode 0600)
-//   install    persist config, write a launchd/systemd user unit, start it,
-//              print the Host/Port/Token block to paste into Pion
+//   install    persist config, write a launchd/systemd/scheduled-task unit,
+//              start it, print the Host/Port/Token block to paste into Pion
 //   uninstall  stop + remove the unit (--purge also deletes the data dir)
 //   status     config, service state, pi detection, live TCP hello probe
 //   token      show | rotate (rotate restarts the service when installed)
@@ -46,7 +46,7 @@ interface DaemonConfig {
 
 const CONFIG_FILE = 'daemon-config.json'
 const SERVICE_LABEL = 'com.pion.daemon' // launchd
-const SERVICE_ID = 'pion-daemon' // systemd
+const SERVICE_ID = 'pion-daemon' // systemd / Windows scheduled task
 
 // ── small output/parse helpers ─────────────────────────────────────────────
 
@@ -177,30 +177,38 @@ function looksExecutable(path: string): boolean {
 /** PATH scan + the fixed candidates pi-rpc also probes (minimal-PATH safety
  * for service managers), independent of detectPi's spawn probe. */
 function findPiPath(): string | null {
+  const win32 = process.platform === 'win32'
   const candidates: string[] = []
   const pathEnv = process.env.PATH ?? ''
-  for (const dir of pathEnv.split(':')) {
-    if (dir) candidates.push(join(dir, 'pi'))
+  for (const dir of pathEnv.split(win32 ? ';' : ':')) {
+    if (!dir) continue
+    candidates.push(join(dir, win32 ? 'pi.cmd' : 'pi'))
+    if (win32) candidates.push(join(dir, 'pi.exe'))
   }
   const home = homedir()
-  for (const dir of [join(home, '.local', 'bin'), join(home, '.bun', 'bin'), join(home, '.npm-global', 'bin'), join(home, '.volta', 'bin'), '/usr/local/bin', '/opt/homebrew/bin']) {
-    candidates.push(join(dir, 'pi'))
+  for (const dir of win32
+    ? // npm global bin is the documented Windows install route (BootScreen);
+      // pi.exe covers a future native install. Volta's shims live in AppData.
+      [join(home, 'AppData', 'Roaming', 'npm'), join(home, '.local', 'bin'), join(home, '.npm-global', 'bin'), join(home, 'AppData', 'Local', 'Volta', 'bin')]
+    : [join(home, '.local', 'bin'), join(home, '.bun', 'bin'), join(home, '.npm-global', 'bin'), join(home, '.volta', 'bin'), '/usr/local/bin', '/opt/homebrew/bin']) {
+    candidates.push(join(dir, win32 ? 'pi.cmd' : 'pi'))
   }
   return candidates.find(looksExecutable) ?? null
 }
 
 function servicePathPrefix(piPath: string | null): string {
+  const win32 = process.platform === 'win32'
+  const home = homedir()
   const parts = [
     piPath ? dirname(piPath) : null,
-    join(homedir(), '.local', 'bin'),
-    '/usr/local/bin',
+    win32 ? join(home, 'AppData', 'Roaming', 'npm') : join(home, '.local', 'bin'),
+    ...(win32 ? [] : ['/usr/local/bin']),
     process.platform === 'darwin' ? '/opt/homebrew/bin' : null,
-    '/usr/bin',
-    '/bin',
-    '/usr/sbin',
-    '/sbin',
+    ...(win32
+      ? [join(home, '.npm-global', 'bin'), join(home, 'AppData', 'Local', 'Volta', 'bin'), join(process.env.SystemRoot ?? 'C:\\Windows', 'System32')]
+      : ['/usr/bin', '/bin', '/usr/sbin', '/sbin']),
   ].filter((p): p is string => typeof p === 'string')
-  return [...new Set(parts)].join(':')
+  return [...new Set(parts)].join(win32 ? ';' : ':')
 }
 
 // ── service unit generation (launchd plist / systemd user unit) ────────────
@@ -278,6 +286,20 @@ WantedBy=default.target
 `
 }
 
+/** The scheduled-task wrapper .cmd. schtasks /TR has a ~261-char budget and
+ * no way to set PATH or redirect output, so the task only runs this script —
+ * it injects PATH, launches the daemon and appends to service.log. */
+function taskScriptPath(userData: string): string {
+  return join(userData, 'pion-daemon-task.cmd')
+}
+
+function generateWinTaskScript(spec: ServiceSpec): string {
+  const program = serviceProgramArgs(spec)
+    .map((a) => (a.includes(' ') ? `"${a}"` : a))
+    .join(' ')
+  return ['@echo off', `set "PATH=${spec.pathPrefix}"`, `${program} >> "${join(spec.userData, 'service.log')}" 2>&1`, ''].join('\r\n')
+}
+
 // ── service control (spawnSync; dry-run tests never reach these) ───────────
 
 function runTool(cmd: string, args: string[], options: { check?: boolean } = {}): { status: number | null; stdout: string; stderr: string } {
@@ -312,6 +334,13 @@ function serviceStartOrRestart(spec: ServiceSpec): void {
     }
     return
   }
+  if (process.platform === 'win32') {
+    // schtasks has no restart: End first so an install over a live daemon
+    // swaps the process onto the new bundle (same trap as the linux branch).
+    runTool('schtasks', ['/End', '/TN', SERVICE_ID])
+    runTool('schtasks', ['/Run', '/TN', SERVICE_ID], { check: true })
+    return
+  }
   fail(`unsupported platform "${process.platform}" for install; run manually: ${serviceProgramArgs(spec).join(' ')}`)
 }
 
@@ -331,6 +360,11 @@ function serviceRestart(): void {
   if (process.platform === 'linux') {
     const r = runTool('systemctl', ['--user', 'restart', SERVICE_ID])
     if (r.status !== 0) failServiceUnavailable(r.stderr)
+    return
+  }
+  if (process.platform === 'win32') {
+    runTool('schtasks', ['/End', '/TN', SERVICE_ID])
+    runTool('schtasks', ['/Run', '/TN', SERVICE_ID], { check: true })
     return
   }
   fail(`unsupported platform "${process.platform}"; restart the daemon yourself`)
@@ -355,6 +389,16 @@ function serviceStopAndRemove(purgeData: boolean, userData: string): void {
       void rm(unit).catch(() => undefined)
       runTool('systemctl', ['--user', 'daemon-reload'])
       say(`removed ${unit}`)
+    }
+  } else if (process.platform === 'win32') {
+    const query = runTool('schtasks', ['/Query', '/TN', SERVICE_ID])
+    const wrapper = taskScriptPath(userData)
+    if (query.status !== 0 && !existsSync(wrapper)) {
+      say(`not installed (no scheduled task ${SERVICE_ID})`)
+    } else {
+      runTool('schtasks', ['/Delete', '/F', '/TN', SERVICE_ID])
+      void rm(wrapper).catch(() => undefined)
+      say(`removed scheduled task ${SERVICE_ID} and ${wrapper}`)
     }
   } else {
     warn(`unsupported platform "${process.platform}"; nothing to uninstall`)
@@ -386,6 +430,20 @@ function serviceState(): ServiceState {
       return enabled.status === 0 ? { installed: true, detail: 'enabled, inactive' } : { installed: false, detail: 'not installed' }
     }
     return { installed: true, detail: `active (${active.stdout.trim()})` }
+  }
+  if (process.platform === 'win32') {
+    // Only the exit code is authoritative — schtasks output (Status:/状态:)
+    // is localized, so it is surfaced verbatim rather than parsed.
+    const r = runTool('schtasks', ['/Query', '/TN', SERVICE_ID, '/FO', 'LIST'])
+    if (r.status !== 0) return { installed: false, detail: 'not installed' }
+    const status = r.stdout
+      .split(/\r?\n/)
+      .find((l) => /^(status|状态)\s*:/i.test(l))
+      ?.split(':')
+      .slice(1)
+      .join(':')
+      .trim()
+    return { installed: true, detail: status ? `registered (${status})` : 'registered' }
   }
   return { installed: false, detail: 'unknown platform' }
 }
@@ -538,13 +596,32 @@ async function cmdInstall(flags: CliFlags): Promise<void> {
     await mkdir(dirname(unitPath()), { recursive: true })
     await writeFile(unitPath(), unit, { mode: 0o644 })
     say(`wrote ${unitPath()}`)
+  } else if (process.platform === 'win32') {
+    const script = generateWinTaskScript(spec)
+    if (flags.has('dry-run')) {
+      say(script)
+      printConnectionInfo(config, 'pion-daemon (dry run)', { wsDisabled })
+      return
+    }
+    const wrapper = taskScriptPath(userData)
+    await mkdir(dirname(wrapper), { recursive: true })
+    await writeFile(wrapper, script)
+    say(`wrote ${wrapper}`)
+    // /TR only carries the short wrapper path (its own ~261-char budget);
+    // ONLOGON keeps the daemon per-user and admin-free.
+    runTool('schtasks', ['/Create', '/F', '/SC', 'ONLOGON', '/TN', SERVICE_ID, '/TR', `"${wrapper}"`], { check: true })
+    say(`registered scheduled task ${SERVICE_ID} (runs at logon)`)
   } else if (!flags.has('dry-run')) {
     fail(`unsupported platform "${process.platform}" for install; run manually:\n  ${serviceProgramArgs(spec).join(' ')}`)
   }
 
   if (!flags.has('no-start') && !flags.has('dry-run')) {
     serviceStartOrRestart(spec)
-    say(`service ${SERVICE_LABEL} started (KeepAlive/Restart=always)`)
+    say(
+      process.platform === 'win32'
+        ? `service ${SERVICE_ID} started (auto-start at logon; note: Task Scheduler does not restart it on crash — re-run 'schtasks /Run /TN ${SERVICE_ID}' or reinstall to recover)`
+        : `service ${SERVICE_LABEL} started (KeepAlive/Restart=always)`
+    )
   }
   if (!resources) warn('warn: kanban bridge not found (expected <userData>/share/resources/kanban-bridge.ts) — kanban will report err.kanban.bridgeMissing until it is installed')
   printConnectionInfo(config, 'pion-daemon installed', { wsDisabled })
@@ -614,8 +691,9 @@ usage:
   pion-daemon install [--listen <host:port>] [--listen-ws <host:port>]
                       [--no-listen-ws] [--token <secret>] [--user-data <dir>]
                       [--resources <dir>] [--dry-run] [--no-start]
-      Persist the config, write the launchd (macOS) / systemd user (Linux)
-      unit, start it, print the Host/Port/Token block for Pion's settings.
+      Persist the config, write the launchd (macOS) / systemd user (Linux) /
+      scheduled task (Windows) unit, start it, print the Host/Port/Token
+      block for Pion's settings.
 
   pion-daemon status    [--user-data <dir>]   config + service + pi + probe
   pion-daemon token [show|rotate] [--user-data <dir>]
