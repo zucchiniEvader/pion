@@ -68,3 +68,18 @@ linux:
   target:
     - AppImage
     - deb
+# Windows(NSIS,x64):electron-rebuild 在 Windows 需要 VS Build Tools(CI 的
+# windows runner 自带;本机没有就没法本地出包)。未签名 —— SmartScreen 首次
+# 运行会拦("更多信息 → 仍要运行"),上证书另起一轮。应用内自更新走
+# latest.yml + exe + blockmap(updater.ts 的 selfUpdateSupported 放行 win32)。
+# arm64 Windows 暂不出:需要 arm64 交叉工具链,有需求再开 matrix。
+win:
+  icon: assets/pion-logo.png # ≥256 的 png,electron-builder 自动转 ico
+  artifactName: Pion-${version}-${arch}.${ext}
+  target:
+    - target: nsis
+      arch: [x64]
+nsis:
+  oneClick: true # 与 mac dmg 同款"直接装";要可选目录改 false + allowToChangeInstallationDirectory
+  perMachine: false # per-user 安装,不需要管理员
+  deleteAppDataOnUninstall: false # 卸载保留 userData(会话/projects 配置)
