@@ -67,6 +67,28 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
+  # Windows 产物（NSIS x64）：electron-rebuild 编 node-pty 需要 VS Build Tools，
+  # windows runner 自带。未签名，SmartScreen 首启会拦（用户点"仍要运行"）。
+  # electron-updater 在 Windows 读 latest.yml + exe + blockmap，缺一则自更新失败。
+  # 上传步骤用 bash shell：PowerShell 不展开 release/*.exe 这种裸 glob。
+  build-win:
+    needs: build # Release 由 build job 创建，排在其后避免 create 竞争
+    runs-on: windows-latest
+    permissions:
+      contents: write # gh release upload 需要
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run dist:win
+      - run: gh release upload "$GITHUB_REF_NAME" release/*.exe release/*.exe.blockmap release/latest.yml --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+
   # 远程 runtime 的 daemon CLI 资产（install.sh/manifest.json/pion-daemon +
   # 两个 resources）——纯 JS esbuild 产物，无 native 编译，ubuntu runner 即可。
   # 应用内「远程安装」的一键命令指向 releases/latest/download，同一 tag 发布。
@@ -90,6 +112,7 @@ jobs:
           gh release upload "$GITHUB_REF_NAME" \
             release/daemon-cli/install.sh \
             release/daemon-cli/uninstall.sh \
+            release/daemon-cli/install.ps1 \
             release/daemon-cli/manifest.json \
             release/daemon-cli/pion-daemon \
             release/daemon-cli/resources/kanban-bridge.ts \

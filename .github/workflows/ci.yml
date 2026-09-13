@@ -20,3 +20,18 @@ jobs:
       - run: npm run typecheck
       - run: npm run test:i18n
       - run: npm run test:purity
+
+  # Windows 同一组纯检查，兜住 win32 分支的类型面（schtasks / ConPTY / NSIS
+  # 等改动的编译期回归）。--ignore-scripts：纯检查不需要编 node-pty。
+  check-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run typecheck
+      - run: npm run test:i18n
+      - run: npm run test:purity
