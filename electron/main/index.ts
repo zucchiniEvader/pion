@@ -586,12 +586,14 @@ function registerIpc(): void {
 
   // Task-completion notification (renderer decides WHEN — agent_settled for
   // a session the user is not watching). Click focuses the window.
-  ipcMain.handle(IPC.APP_NOTIFY, (_e, payload: { title?: unknown; body?: unknown }): boolean => {
+  ipcMain.handle(IPC.APP_NOTIFY, (_e, payload: { title?: unknown; subtitle?: unknown; body?: unknown }): boolean => {
     if (!Notification.isSupported()) return false
     const title = typeof payload?.title === 'string' ? payload.title.slice(0, 200) : ''
     const body = typeof payload?.body === 'string' ? payload.body.slice(0, 500) : ''
+    // macOS-only extra line (the session label); other platforms drop it.
+    const subtitle = typeof payload?.subtitle === 'string' ? payload.subtitle.slice(0, 200) : ''
     if (!title) return false
-    const n = new Notification({ title, body })
+    const n = new Notification({ title, subtitle: subtitle || undefined, body })
     n.on('click', () => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         if (mainWindow.isMinimized()) mainWindow.restore()

@@ -803,8 +803,9 @@ export interface PiGuiApi {
     /** Subscribes to installer progress; returns an unsubscribe function. */
     onInstallProgress: (cb: (e: UpdateProgressEvent) => void) => () => void
     /** Posts a system notification (agent run finished). Resolves false when
-     * the OS declined it (unsupported / no permission). */
-    notify: (payload: { title: string; body: string }) => Promise<boolean>
+     * the OS declined it (unsupported / no permission). `subtitle` is its own
+     * line under the title on macOS and ignored elsewhere. */
+    notify: (payload: { title: string; subtitle?: string; body: string }) => Promise<boolean>
     /** Full model catalog from `pi --list-models` (cached in main). */
     modelsList: () => Promise<PiAvailableModel[]>
     /** Persists defaultProvider/defaultModel into pi's settings.json. */

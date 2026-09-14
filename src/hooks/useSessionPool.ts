@@ -80,6 +80,22 @@ function noticeTone(value: unknown): 'info' | 'warning' | 'error' {
   return value === 'warning' || value === 'error' ? value : 'info'
 }
 
+// Which conversation finished, for the notification's own line: the first
+// thing the user said in it, single-lined and clipped. Sessions are named the
+// same way everywhere else (sidebar title, pi's session file), so the banner
+// matches what the user sees in the list. Bare runtimes have no user turn.
+function sessionLabel(s: SessionState | undefined): string | undefined {
+  for (const m of s?.transcript ?? []) {
+    if (m.role !== 'user') continue
+    for (const p of m.parts) {
+      if (p.type !== 'text') continue
+      const line = p.text.replace(/\s+/g, ' ').trim()
+      if (line) return line.length > 80 ? `${line.slice(0, 79)}…` : line
+    }
+  }
+  return undefined
+}
+
 // Pool of per-runtime session states. Every PI event is routed by its
 // envelope.runtimeId to that runtime's own SessionState, so pooled runtimes
 // keep streaming in the background while only `activeId` is on screen.
@@ -256,7 +272,7 @@ export function useSessionPool() {
           const project = s?.runtime?.cwd?.split('/').filter(Boolean).pop() || 'Pion'
           const durMs = s?.startedAt ? Date.now() - s.startedAt : null
           const body = durMs != null ? tNow('transcript.workDone', { dur: fmtDur(durMs, langNow) }) : tNow('notify.done')
-          void window.pi.app.notify({ title: project, body }).catch(() => undefined)
+          void window.pi.app.notify({ title: project, subtitle: sessionLabel(s), body }).catch(() => undefined)
         }
       }
     })

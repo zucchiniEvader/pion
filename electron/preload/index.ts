@@ -262,9 +262,10 @@ const api: PiGuiApi = {
     authRemove: (provider) => invoke<AuthStateResult>(IPC.APP_AUTH_REMOVE, assertNonEmptyString(provider, 'provider', 100)),
     installPi: () => invoke<{ started: boolean; error?: string }>(IPC.APP_PI_INSTALL),
     onInstallProgress: (cb) => subscribe<UpdateProgressEvent>(IPC.APP_PI_INSTALL_PROGRESS, cb),
-    notify: (payload: { title: string; body: string }) => {
-      if (!isObject(payload) || typeof payload.title !== 'string' || typeof payload.body !== 'string') {
-        throw new TypeError('notify payload must be { title: string, body: string }')
+    notify: (payload: { title: string; subtitle?: string; body: string }) => {
+      const { title, subtitle, body } = isObject(payload) ? (payload as Record<string, unknown>) : {}
+      if (typeof title !== 'string' || typeof body !== 'string' || (subtitle !== undefined && typeof subtitle !== 'string')) {
+        throw new TypeError('notify payload must be { title: string, subtitle?: string, body: string }')
       }
       return invoke<boolean>(IPC.APP_NOTIFY, payload)
     },
