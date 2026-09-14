@@ -5,7 +5,7 @@ import { app, BrowserWindow, ipcMain, dialog, shell, nativeTheme, screen, Notifi
 // Dev mode on Windows/Linux derives the app name from the binary ("electron");
 // macOS dev uses the patched Info.plist (scripts/patch-dock-name.mjs). Set it
 // explicitly so app.getName() and default menus are right everywhere.
-app.setName('Pion')
+app.setName(process.env.PION_APP_NAME ?? 'Pion')
 import { join, basename, dirname } from 'node:path'
 import { copyFile, readFile, writeFile, rename } from 'node:fs/promises'
 import { existsSync, writeFileSync } from 'node:fs'

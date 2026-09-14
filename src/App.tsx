@@ -408,6 +408,10 @@ export default function App() {
   // "+" on a project row: open a new-task draft whose cwd is THAT project;
   // the runtime spawns when the first message is sent.
   const newTaskForProject = useCallback((project: ProjectRecord) => {
+    // A prewarm parked for ANOTHER project blocks the effect below forever
+    // (prewarmInFlight guard) while its draft never matches this project —
+    // drop it like openProject does so this project gets its own prewarm.
+    prewarmRef.current = null
     setActiveProject(project)
     setMainView('session')
     setComposingNew(true)
@@ -625,6 +629,19 @@ export default function App() {
   // emptiness alone would otherwise trap the page on the home surface forever.
   const draftRuntime = startingMessage === null && isInertDraft(active)
 
+  // Draft surfaces (new-task / landing home) must bind the composer to the
+  // DRAFT runtime only. Binding to whatever session happens to be active
+  // routes set_model/set_thinking to that OLD session while the message
+  // lands on the prewarmed draft — the chip then "reverts" to the default
+  // model on send and the old session is silently mutated. Until the draft
+  // runtime is up the menus stay disabled (composer.piStartToSwitch).
+  const composerRuntime =
+    composingNew || draftRuntime
+      ? isInertDraft(active, activeProject?.path)
+        ? active.runtime
+        : null
+      : (active?.runtime ?? null)
+
   // Home hero: greeting + starter chips in the space above the composer.
   // Shown whenever no conversation is on screen — landing (with or without a
   // prewarmed draft runtime) or a new-task draft. While the runtime spawns
@@ -799,7 +816,7 @@ export default function App() {
             <Composer
               mode={composingNew || !active?.runtime || draftRuntime ? 'draft' : 'live'}
               status={active?.status ?? (pool.pendingStart ? 'starting' : 'idle')}
-              runtime={active?.runtime ?? null}
+              runtime={composerRuntime}
               contextUsage={active?.contextUsage ?? null}
               draft={draft}
               onDraftChange={setDraft}
@@ -825,15 +842,15 @@ export default function App() {
               }}
               pendingDispatch={startingMessage !== null && !active?.runtime}
               onSetModel={(provider, modelId) =>
-                active?.runtime ? pool.setModel(active.runtime.runtimeId, provider, modelId) : Promise.resolve()}
+                composerRuntime ? pool.setModel(composerRuntime.runtimeId, provider, modelId) : Promise.resolve()}
               onSetThinkingLevel={(level) =>
-                active?.runtime ? pool.setThinkingLevel(active.runtime.runtimeId, level) : Promise.resolve()}
+                composerRuntime ? pool.setThinkingLevel(composerRuntime.runtimeId, level) : Promise.resolve()}
               onGetModels={() =>
-                active?.runtime ? pool.getAvailableModels(active.runtime.runtimeId) : Promise.resolve([])}
+                composerRuntime ? pool.getAvailableModels(composerRuntime.runtimeId) : Promise.resolve([])}
               onGetThinkingLevels={() =>
-                active?.runtime ? pool.getAvailableThinkingLevels(active.runtime.runtimeId) : Promise.resolve([])}
+                composerRuntime ? pool.getAvailableThinkingLevels(composerRuntime.runtimeId) : Promise.resolve([])}
               onGetCommands={() =>
-                active?.runtime ? pool.getAvailableCommands(active.runtime.runtimeId) : Promise.resolve([])}
+                composerRuntime ? pool.getAvailableCommands(composerRuntime.runtimeId) : Promise.resolve([])}
               planStatus={composingNew ? null : planStatus}
               extensionStatuses={composingNew ? [] : extensionStatuses}
               projects={projects}
