@@ -299,6 +299,14 @@ export default function App() {
     // happened). Always open the draft surface; without a project the
     // composer's selector gets the hint, and sending still requires one.
     if (!activeProject) setProjectNudge((n) => n + 1)
+    // A prewarm parked from an earlier stay on the home surface belongs to
+    // that visit: while it sits in prewarmRef the prewarm effect is blocked
+    // (prewarmInFlight) and this new-task surface never gets a draft runtime
+    // of its own — the model/thinking chips then stay disabled
+    // (composer.piStartToSwitch) for as long as the page is open. Drop it the
+    // same way openProject/newTaskForProject do; the effect below boots one
+    // for THIS draft.
+    prewarmRef.current = null
     setMainView('session')
     setComposingNew(true)
     setComposerFocus((k) => k + 1)
