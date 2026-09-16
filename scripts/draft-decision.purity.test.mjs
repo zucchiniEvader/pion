@@ -71,6 +71,18 @@ check(isInertDraft, true, 'cwd match with projectPath', blank(), '/proj/a')
 check(isInertDraft, false, 'cwd mismatch with projectPath', blank(), '/proj/b')
 check(isInertDraft, true, 'without projectPath cwd is not checked', blank({ runtime: { runtimeId: 'rt-1', cwd: '/other' } }))
 
+// Boot chatter: a freshly spawned PI publishes extension notices (and status
+// lines) before the user has said anything. They are transcript ROWS but not
+// conversation — counting rows made a blank draft look used, which is what
+// left the new-task composer without a runtime to bind its model chip to.
+const noticeRow = { role: 'system', parts: [{ type: 'notice', text: 'Ponytail loaded: full' }] }
+const statusRow = { role: 'system', parts: [{ type: 'status', text: 'working' }] }
+const textRow = { role: 'assistant', parts: [{ type: 'text', text: 'hi' }] }
+check(isInertDraft, true, 'boot notice alone keeps the draft blank', blank({ transcript: [noticeRow] }))
+check(isInertDraft, true, 'notice + status still blank', blank({ transcript: [noticeRow, statusRow] }))
+check(isInertDraft, false, 'a content row after a notice disqualifies', blank({ transcript: [noticeRow, textRow] }))
+check(isInertDraft, false, 'partless row (unknown shape) stays conservative', blank({ transcript: [{ id: 'm1' }] }))
+
 // ── isHomeSurfaceUp ──────────────────────────────────────────────────────
 console.log('isHomeSurfaceUp:')
 check(isHomeSurfaceUp, true, 'no session at all → hero up', null, false)

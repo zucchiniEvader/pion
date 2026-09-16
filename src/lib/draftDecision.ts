@@ -20,9 +20,26 @@
 /** Minimal structural snapshot of a pooled session state (SessionState ⊇ this). */
 export interface DraftSnapshot {
   runtime: { runtimeId: string; cwd: string } | null
-  transcript: { length: number }
+  /** Transcript rows. Only the count and the part KINDS are read: rows holding
+   * nothing but boot chatter do not make a runtime non-blank (see
+   * isChatterRow). */
+  transcript: ReadonlyArray<{ parts?: ReadonlyArray<{ type?: string }> }>
   lastStart: { sessionPath?: string } | null
   lastDispatchAt: number | null
+}
+
+/**
+ * A transcript row carrying no conversation: boot chatter from extensions
+ * (notify → notice rows, plus status lines). A freshly spawned PI publishes
+ * these before it has been asked anything — "Ponytail loaded: full" — and
+ * they arrive as ordinary transcript rows, so counting rows would read a
+ * perfectly blank draft as "has history". Unknown/absent part shapes count as
+ * content: the predicate must stay conservative about what it accepts.
+ */
+function isChatterRow(row: DraftSnapshot['transcript'][number] | undefined): boolean {
+  const parts = row?.parts
+  if (!Array.isArray(parts) || parts.length === 0) return false
+  return parts.every((p) => p?.type === 'notice' || p?.type === 'status')
 }
 
 /**
@@ -34,7 +51,8 @@ export interface DraftSnapshot {
  * active draft (startFromHome), keeping the home hero up (draftRuntime), and
  * skipping a redundant prewarm. Note transcript emptiness alone is NOT draft
  * evidence — extension-intercepted commands (/plan) stream no transcript
- * events, hence the lastDispatchAt check.
+ * events, hence the lastDispatchAt check — and that boot chatter is not
+ * transcript content either (isChatterRow).
  */
 export function isInertDraft(
   s: (DraftSnapshot & { exited?: boolean }) | null | undefined,
@@ -43,7 +61,7 @@ export function isInertDraft(
   return (
     !!s?.runtime &&
     s.lastStart?.sessionPath == null &&
-    s.transcript.length === 0 &&
+    s.transcript.every(isChatterRow) &&
     s.lastDispatchAt == null &&
     (projectPath == null || s.runtime.cwd === projectPath)
   )
