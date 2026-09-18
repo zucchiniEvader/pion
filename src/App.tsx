@@ -400,9 +400,12 @@ export default function App() {
     }
   }, [activeProject, composingNew, active, pool, refreshSessions])
 
-  // 临时聊天 draft (chat mode): same lazy-start shape as new-task, but no
-  // project — the composer shows the chat badge, and the first send creates
-  // the temp workspace daemon-side.
+  // 临时聊天 draft (chat mode): same shape as new-task, but no project — the
+  // composer shows the chat badge, and the chat runtime parks NOW (the
+  // model/thinking chips need a live runtime to enumerate and set; a quick
+  // chat has no project to prewarm against, so its "prewarm" IS the chat
+  // runtime itself, on the temp workspace the daemon creates). The first
+  // send consumes it via startTempChat.
   const startTempDraft = useCallback(() => {
     prewarmRef.current = null
     setTempDraft(true)
@@ -410,17 +413,54 @@ export default function App() {
     setMainView('session')
     setComposingNew(true)
     setComposerFocus((k) => k + 1)
+    prewarmRef.current = pool.start({ projectPath: '', temp: true }).catch(() => null)
+  }, [pool])
+
+  // After a temp start resolves, adopt the daemon-created workspace record
+  // as the active project (BEFORE dispatching: the transcript surface's
+  // render guard keys on activeProject, so it must mount while the reply
+  // streams, not after the send resolves).
+  const adoptTempProject = useCallback(async (cwd: string): Promise<void> => {
+    const list = await window.pi.projects.list().catch(() => [] as ProjectRecord[])
+    setProjects(list)
+    setActiveProject(
+      list.find((p) => p.path === cwd) ?? {
+        id: cwd,
+        name: cwd.split('/').pop() || cwd,
+        path: cwd,
+        lastOpenedAt: new Date().toISOString(),
+        kind: 'temp',
+      },
+    )
   }, [])
 
-  // First send of a temp chat: the daemon creates the random workspace under
-  // ~/.pion/tmp-workspaces and registers it (kind:'temp') during the start;
-  // adopt that record as the active project BEFORE dispatching so the
-  // transcript surface mounts while the reply streams (the render guard keys
-  // on activeProject). Manager-mode kanban tools are attached daemon-side.
+  // First send of a temp chat. Consumption first (same pattern as
+  // startFromHome's prewarm): the runtime parked at draft open is revalidated
+  // as a still-blank draft and sent into directly — no duplicate spawn. A
+  // stale/evicted/dispatched park falls through to the optimistic fresh start
+  // below; the daemon creates the workspace + registers kind:'temp' during
+  // the start, and manager-mode kanban tools attach daemon-side either way.
+  // (judgePrewarm's project check cannot apply — the temp cwd only exists
+  // daemon-side — so the blank-draft verdict is re-derived via isInertDraft.)
   const startTempChat = useCallback(async (text: string, images: PromptImage[] = []): Promise<boolean> => {
     setStartingMessage({ text, images })
     setComposingNew(false)
     setTempDraft(false)
+    const parkedPromise = prewarmRef.current
+    prewarmRef.current = null
+    const parked = parkedPromise ? await parkedPromise : null
+    if (parked && isInertDraft(pool.sessions.get(parked.runtimeId))) {
+      pool.switchActive(parked.runtimeId)
+      await adoptTempProject(parked.cwd)
+      try {
+        await pool.send(parked.runtimeId, text, 'prompt', images)
+        return true
+      } finally {
+        setStartingMessage(null)
+        // The session file only exists once the runtime has started; list after.
+        void refreshSessions(parked.cwd)
+      }
+    }
     let info: RuntimeInfo | null = null
     try {
       const started = await pool.start({ projectPath: '', temp: true })
@@ -433,25 +473,15 @@ export default function App() {
         return false
       }
       const cwd = started.cwd
-      const list = await window.pi.projects.list().catch(() => [] as ProjectRecord[])
-      setProjects(list)
-      setActiveProject(
-        list.find((p) => p.path === cwd) ?? {
-          id: cwd,
-          name: cwd.split('/').pop() || cwd,
-          path: cwd,
-          lastOpenedAt: new Date().toISOString(),
-          kind: 'temp',
-        },
-      )
-      await pool.send(info.runtimeId, text, 'prompt', images)
+      await adoptTempProject(cwd)
+      await pool.send(started.runtimeId, text, 'prompt', images)
       return true
     } finally {
       setStartingMessage(null)
       // The session file only exists once the runtime has started; list after.
       if (info) void refreshSessions(info.cwd)
     }
-  }, [pool, refreshSessions])
+  }, [pool, refreshSessions, adoptTempProject])
 
   // Prewarm whenever the home surface is up with a project selected — the
   // landing page after picking a project, not just an explicit new-task
