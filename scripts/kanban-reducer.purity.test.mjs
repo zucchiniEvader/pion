@@ -88,6 +88,26 @@ assert(afterNote?.[0].notes.length === 1 && afterNote?.[0].notes[0].text === '�
 const archive = T({ type: 'card_archived', id: 'k_a1' })
 assert(check(applyKanbanEvent, 'archive folds', afterNote, archive)?.[0].archived === true, 'archive flags the card')
 
+// ── queue events (P3): membership is a fold projection ──────────────
+console.log('queue events:')
+assert(parseKanbanEventLine(JSON.stringify({ v: 1, type: 'card_enqueued', id: 'k_a1', by: 'agent', ts: 'z' })) !== null, 'valid card_enqueued parses')
+assert(parseKanbanEventLine(JSON.stringify({ v: 1, type: 'card_dequeued', id: 'k_x', by: 'user', ts: 'z' })) !== null, 'valid card_dequeued parses')
+assert(parseKanbanEventLine(JSON.stringify({ v: 1, type: 'card_enqueued', id: 'k_x', by: 'robot', ts: 'z' })) === null, 'invalid actor → null')
+const enqueue = T({ type: 'card_enqueued', id: 'k_a1', by: 'user', ts: '2026-08-29T14:00:00.000Z' })
+const afterEnqueue = check(applyKanbanEvent, 'enqueue folds', afterNote, enqueue)
+assert(afterEnqueue?.[0].queued === true && afterEnqueue?.[0].enqueuedAt === enqueue.ts, 'enqueue sets queued + enqueuedAt')
+// Dispatch consumption: any move out of todo clears membership; moving
+// back to todo does NOT re-queue.
+const moveToProgress = T({ type: 'card_moved', id: 'k_a1', to: 'in_progress', by: 'user' })
+const afterDispatch = check(applyKanbanEvent, 'dispatch move folds', afterEnqueue, moveToProgress)
+assert(afterDispatch?.[0].queued === false, 'move out of todo consumes queue membership')
+const backToTodo = T({ type: 'card_moved', id: 'k_a1', to: 'todo', by: 'user' })
+assert(check(applyKanbanEvent, 'move back folds', afterDispatch, backToTodo)?.[0].queued === false, 'move back to todo does not re-queue')
+const reEnqueue = T({ type: 'card_enqueued', id: 'k_a1', by: 'agent', ts: '2026-08-29T15:00:00.000Z' })
+const dequeue = T({ type: 'card_dequeued', id: 'k_a1', by: 'user', ts: '2026-08-29T16:00:00.000Z' })
+assert(check(applyKanbanEvent, 'dequeue folds', check(applyKanbanEvent, 're-enqueue folds', afterDispatch, reEnqueue), dequeue)?.[0].queued === false, 'dequeue clears membership')
+assert(check(applyKanbanEvent, 'archive dequeues', check(applyKanbanEvent, 'enqueue2 folds', afterNote, enqueue), archive)?.[0].queued === false, 'archive clears membership')
+
 assert(eq(check(applyKanbanEvent, 'unknown-card events ignored', base, note), base), 'events for unknown card are skipped')
 assert(eq(check(applyKanbanEvent, 'unknown event type ignored', base, { v: 1, type: 'card_beamed', id: 'k_a1', ts: 'z' }), base), 'unknown event type skipped')
 

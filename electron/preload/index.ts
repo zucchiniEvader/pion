@@ -23,6 +23,7 @@ import type {
   KanbanChangeEvent,
   KanbanCreateInput,
   KanbanDispatchInput,
+  KanbanQueueConfig,
   KanbanUpdateInput,
   CronCreateInput,
   CronJob,
@@ -383,6 +384,25 @@ const api: PiGuiApi = {
     assign: (projectPath, cardId, input) =>
       invoke<KanbanCard>(IPC.KANBAN_ASSIGN, assertProjectPath(projectPath), assertNonEmptyString(cardId, 'cardId'), asKanbanAssignInput(input)),
     archive: (projectPath, cardId) => invoke<void>(IPC.KANBAN_ARCHIVE, assertProjectPath(projectPath), assertNonEmptyString(cardId, 'cardId')),
+    enqueue: (projectPath, cardId) => invoke<KanbanCard>(IPC.KANBAN_ENQUEUE, assertProjectPath(projectPath), assertNonEmptyString(cardId, 'cardId')),
+    dequeue: (projectPath, cardId) => invoke<KanbanCard>(IPC.KANBAN_DEQUEUE, assertProjectPath(projectPath), assertNonEmptyString(cardId, 'cardId')),
+    queueConfig: (patch) => {
+      const v = (patch ?? {}) as Record<string, unknown>
+      const clean: Record<string, unknown> = {}
+      if (v.enabled !== undefined) {
+        if (typeof v.enabled !== 'boolean') throw new TypeError('enabled must be a boolean')
+        clean.enabled = v.enabled
+      }
+      if (v.concurrency !== undefined) {
+        if (typeof v.concurrency !== 'number' || !Number.isInteger(v.concurrency)) throw new TypeError('concurrency must be an integer')
+        clean.concurrency = v.concurrency
+      }
+      if (v.cooldownSec !== undefined) {
+        if (typeof v.cooldownSec !== 'number' || !Number.isInteger(v.cooldownSec)) throw new TypeError('cooldownSec must be an integer')
+        clean.cooldownSec = v.cooldownSec
+      }
+      return invoke<KanbanQueueConfig>(IPC.KANBAN_QUEUE_CONFIG, clean)
+    },
     dispatch: (projectPath, cardId, input) =>
       invoke<RuntimeInfo>(IPC.KANBAN_DISPATCH, assertProjectPath(projectPath), assertNonEmptyString(cardId, 'cardId'), asKanbanDispatchInput(input)),
     moveProject: (projectPath, cardId, toProjectPath) => {

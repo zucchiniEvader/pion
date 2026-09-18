@@ -3,6 +3,7 @@ import {
   Archive,
   Check,
   Link2,
+  ListOrdered,
   LoaderCircle,
   MessageSquarePlus,
   Play,
@@ -45,6 +46,8 @@ interface CardDetailPageProps {
   /** Review → Done: the human sign-off that closes the loop. */
   onComplete: () => Promise<void>
   onDispatch: (input: KanbanDispatchInput) => Promise<void>
+  /** Queue toggle: enqueue when true, dequeue when false. */
+  onEnqueue: (enqueue: boolean) => Promise<void>
   /** Migration for unassigned cards: execution/assign requires a project. */
   onMoveProject: (toProjectPath: string) => Promise<void>
   onViewSession: (sessionFile: string) => void
@@ -63,6 +66,7 @@ export function CardDetailPage({
   onArchive,
   onComplete,
   onDispatch,
+  onEnqueue,
   onMoveProject,
   onViewSession,
 }: CardDetailPageProps) {
@@ -138,6 +142,21 @@ export function CardDetailPage({
           {t(STATUS_KEY[card.status])}
         </Badge>
         <RunStateBadge state={card.runState} />
+        {card.queued && (
+          <Badge tone="accent" title={t('kanban.queuedTitle')}>
+            {t('kanban.queued')}
+          </Badge>
+        )}
+        {/* Queue toggle: a card-level action next to archive. */}
+        <button
+          className={cn(badgeVariants(), 'transition-colors hover:bg-fill-hover hover:text-ink disabled:opacity-40')}
+          disabled={busy || card.archived || card.status !== 'todo'}
+          onClick={() => void run(() => onEnqueue(!card.queued))}
+          title={card.queued ? t('kanban.dequeueTitle') : t('kanban.enqueueTitle')}
+        >
+          <ListOrdered size={11} strokeWidth={1.75} />
+          {card.queued ? t('kanban.dequeue') : t('kanban.enqueue')}
+        </button>
         {/* Archive lives in the header as a card-level action so the bottom
             comment bar stays comment-only (§评论只做评论). */}
         <button

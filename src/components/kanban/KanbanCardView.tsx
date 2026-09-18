@@ -57,14 +57,17 @@ export function ProjectTag({ projectPath, name }: { projectPath: string; name: s
 export function KanbanCardView({
   card,
   projectName,
+  queuePosition,
   onOpen,
 }: {
   card: KanbanCard
   /** Shown as a project tag when provided (all-projects view). */
   projectName?: string
+  /** Global queue position (1-based) when the card is queued. */
+  queuePosition?: number
   onOpen: () => void
 }) {
-  const { lang } = useI18n()
+  const { lang, t } = useI18n()
   return (
     <button
       className={cn(
@@ -76,6 +79,14 @@ export function KanbanCardView({
     >
       <div className="flex items-start gap-1.5">
         <p className={cn('min-w-0 flex-1 text-xs font-medium leading-5', card.archived && 'text-ink2 line-through')}>{card.title}</p>
+        {queuePosition != null && (
+          <span
+            className="shrink-0 rounded bg-tint-accent px-1 py-px text-[10px] font-medium tabular-nums text-accent"
+            title={t('kanban.queuedTitle')}
+          >
+            #{queuePosition}
+          </span>
+        )}
         <RunStateBadge state={card.runState} />
       </div>
       <div className="mt-1 flex items-center gap-2 text-[10px] text-ink2">

@@ -8,7 +8,7 @@
 // daemon/agent.ts; the reverse direction (agent → kanban) is wired through
 // onAgentEvent + setSessionRestartedHook so the dependency stays
 // one-directional.
-import { stat } from 'node:fs/promises'
+import { readFile, writeFile, mkdir, stat } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type {
@@ -67,7 +67,12 @@ async function getKanbanStore(projectPath: string): Promise<KanbanStore> {
 
 function notifyKanbanChanged(projectPath: string): void {
   broadcastKanbanChanged?.(projectPath)
+  // Store changes (GUI ops, bridge tools, external event-log writers) are
+  // the queue pump's primary trigger; kanban.ts registers the kick at boot.
+  queueKick?.()
 }
+// Set by registerKanbanMethods (the pump lives there, next to dispatch).
+let queueKick: (() => void) | null = null
 
 // Cards assigned to this session live in at most one store; push only when a
 // store actually cares (runtime lifecycle events arrive for every pool member).
@@ -402,11 +407,9 @@ export function registerKanbanMethods(server: DaemonServer, userDataDir: string,
   })
   // Dispatch: cold-start a bridge-carrying runtime (prewarms carry no -e),
   // bind the card, move it in_progress, and send the dispatch prompt. The
-  // runState starting projection covers the spawn window.
-  server.register('kanban.dispatch', async (params): Promise<RuntimeInfo> => {
-    const { projectPath, cardId, input } = params as { projectPath: string; cardId: unknown; input: KanbanDispatchInput }
-    await assertProjectDirectory(projectPath)
-    assertKanbanCardId(cardId)
+  // runState starting projection covers the spawn window. Shared by the RPC
+  // method and the queue pump.
+  async function dispatchCard(projectPath: string, cardId: string, input: KanbanDispatchInput): Promise<RuntimeInfo> {
     const v = (input ?? {}) as unknown as Record<string, unknown>
     if (typeof v.fresh !== 'boolean') throw new Error('fresh must be a boolean')
     let sessionPath: string | undefined
@@ -417,12 +420,12 @@ export function registerKanbanMethods(server: DaemonServer, userDataDir: string,
     }
     const modelId = typeof v.modelId === 'string' && v.modelId ? v.modelId : undefined
     const store = await getKanbanStore(projectPath)
-    const card = store.card(cardId as string)
+    const card = store.card(cardId)
     if (card.archived) throw new Error('err.kanban.dispatchArchived')
     const runState = deriveKanbanRunState(card)
     if (runState === 'running' || runState === 'starting') throw new Error('err.kanban.dispatchRunning')
     if (!existsSync(kanbanBridgePath())) throw new Error('err.kanban.bridgeMissingDispatch')
-    kanbanDispatchingCards.add(cardId as string)
+    kanbanDispatchingCards.add(cardId)
     try {
       const info = await startRuntime({
         projectPath,
@@ -431,14 +434,185 @@ export function registerKanbanMethods(server: DaemonServer, userDataDir: string,
         extensions: [kanbanBridgePath()],
       })
       if (!info.sessionFile) throw new Error('err.kanban.dispatchNoSession')
-      await store.assign(cardId as string, { sessionFile: info.sessionFile, ...(modelId ? { model: modelId } : {}) })
-      await store.move(cardId as string, 'in_progress', 'user')
+      await store.assign(cardId, { sessionFile: info.sessionFile, ...(modelId ? { model: modelId } : {}) })
+      await store.move(cardId, 'in_progress', 'user')
       const runtime = getRuntime(info.runtimeId)
       if (runtime) await runtime.command({ type: 'prompt', message: renderDispatchPrompt(card) })
       notifyKanbanChanged(projectPath)
       return info
     } finally {
-      kanbanDispatchingCards.delete(cardId as string)
+      kanbanDispatchingCards.delete(cardId)
     }
+  }
+
+  server.register('kanban.dispatch', async (params): Promise<RuntimeInfo> => {
+    const { projectPath, cardId, input } = params as { projectPath: string; cardId: unknown; input: KanbanDispatchInput }
+    await assertProjectDirectory(projectPath)
+    assertKanbanCardId(cardId)
+    return dispatchCard(projectPath, cardId as string, input)
+  })
+
+  server.register('kanban.enqueue', async (params) => {
+    const { projectPath, cardId } = params as { projectPath: string; cardId: unknown }
+    await assertKanbanTarget(projectPath)
+    const store = await getKanbanStore(projectPath)
+    const card = await store.enqueue(assertKanbanCardId(cardId), 'user')
+    scheduleQueuePump()
+    return kanbanCardWithRunState(projectPath, card)
+  })
+  server.register('kanban.dequeue', async (params) => {
+    const { projectPath, cardId } = params as { projectPath: string; cardId: unknown }
+    await assertKanbanTarget(projectPath)
+    const store = await getKanbanStore(projectPath)
+    const card = await store.dequeue(assertKanbanCardId(cardId), 'user')
+    return kanbanCardWithRunState(projectPath, card)
+  })
+
+  // ── Global auto-dispatch queue (P3) ──────────────────────────────────────
+  // Queue membership is an event-log projection (card_enqueued/card_dequeued;
+  // membership = queued && status 'todo', ordered by enqueuedAt — see
+  // kanbanReducer). The pump is daemon runtime state only: it never persists.
+  // Task end = the bound session's agent_settled / runtime_exit (all four
+  // convergence paths — report, no-report tap, crash, manual move — release
+  // the slot); each release arms a global cooldown before the next dispatch.
+  interface QueueConfig {
+    enabled: boolean
+    concurrency: number
+    cooldownSec: number
+  }
+  const QUEUE_FILE = 'queue.json'
+  const queueDefault: QueueConfig = { enabled: true, concurrency: 1, cooldownSec: 45 }
+  let queueConfig: QueueConfig = { ...queueDefault }
+  let nextDispatchAt = 0
+  let pumpInFlight = false
+
+  async function loadQueueConfig(): Promise<void> {
+    try {
+      const raw = JSON.parse(await readFile(join(userData, QUEUE_FILE), 'utf8')) as Partial<QueueConfig>
+      queueConfig = {
+        enabled: raw.enabled !== false,
+        concurrency: Math.min(4, Math.max(1, Number(raw.concurrency) || 1)),
+        cooldownSec: Math.min(600, Math.max(0, Number(raw.cooldownSec) || 0)),
+      }
+    } catch {
+      queueConfig = { ...queueDefault }
+    }
+  }
+  async function saveQueueConfig(): Promise<void> {
+    await mkdir(userData, { recursive: true })
+    await writeFile(join(userData, QUEUE_FILE), JSON.stringify(queueConfig, null, 2) + '\n')
+  }
+
+  /** All queue candidates across every board, oldest enqueuedAt first. */
+  async function queueCandidates(): Promise<Array<{ projectPath: string; card: KanbanCard }>> {
+    const projects = (await loadProjects()).filter((p) => p.kind !== 'temp')
+    const targets = [KANBAN_UNASSIGNED, ...projects.map((p) => p.path)]
+    const out: Array<{ projectPath: string; card: KanbanCard }> = []
+    for (const projectPath of targets) {
+      const store = await getKanbanStore(projectPath)
+      for (const card of store.cards) {
+        if (card.queued && card.status === 'todo' && !card.archived) out.push({ projectPath, card })
+      }
+    }
+    out.sort((a, b) => (a.card.enqueuedAt ?? '') < (b.card.enqueuedAt ?? '') ? -1 : 1)
+    return out
+  }
+
+  /** Dispatched cards currently occupying a concurrency slot. */
+  async function runningDispatchCount(): Promise<number> {
+    const projects = (await loadProjects()).filter((p) => p.kind !== 'temp')
+    const targets = [KANBAN_UNASSIGNED, ...projects.map((p) => p.path)]
+    let n = 0
+    for (const projectPath of targets) {
+      const store = await getKanbanStore(projectPath)
+      for (const card of store.cards) {
+        const rs = deriveKanbanRunState(card)
+        if (rs === 'running' || rs === 'starting') n++
+      }
+    }
+    return n
+  }
+
+  /** One pump pass: dispatch while free slots, elapsed cooldown, and a
+   * dispatchable queue head remain. Failure of the head card dequeues it
+   * with a system note (a poisoned card must not brick the queue). */
+  async function pump(): Promise<void> {
+    if (pumpInFlight) return
+    pumpInFlight = true
+    try {
+      while (queueConfig.enabled) {
+        if (Date.now() < nextDispatchAt) break
+        const running = await runningDispatchCount()
+        if (running >= queueConfig.concurrency) break
+        const candidates = await queueCandidates()
+        const head = candidates.find(({ card }) => {
+          const rs = deriveKanbanRunState(card)
+          return rs !== 'running' && rs !== 'starting'
+        })
+        if (!head) break
+        // Re-check after the awaits: a settle may have armed the cooldown
+        // while this pass was scanning boards — the race that once let a
+        // dispatch slip through mid-scan (seen as nextIn>0 at dispatch).
+        if (Date.now() < nextDispatchAt) break
+        const { projectPath, card } = head
+        try {
+          await dispatchCard(projectPath, card.id, { fresh: true })
+          const store = await getKanbanStore(projectPath)
+          await store.addNote(card.id, 'system', '由队列自动派发。').catch(() => undefined)
+          console.log(`[queue] dispatched ${card.id} (${projectPath})`)
+        } catch (e) {
+          const store = await getKanbanStore(projectPath)
+          const msg = e instanceof Error ? e.message : String(e)
+          await store.addNote(card.id, 'system', `队列派发失败，已移出队列：${msg}`).catch(() => undefined)
+          await store.dequeue(card.id, 'system').catch(() => undefined)
+          console.log(`[queue] dispatch failed for ${card.id}: ${msg}`)
+          continue // next head — the poisoned card is already out
+        }
+      }
+    } finally {
+      pumpInFlight = false
+    }
+  }
+
+  function scheduleQueuePump(): void {
+    void pump()
+  }
+
+  // Cooldown + pump on every dispatched task's end. agent_settled/
+  // runtime_exit fire for ALL sessions; only ones bound to a kanban card arm
+  // the cooldown (a plain user chat ending must not pace the queue).
+  function armCooldownIfKanbanSession(sessionFile: string | undefined): void {
+    if (!sessionFile || queueConfig.cooldownSec <= 0) return
+    for (const [, store] of kanbanStores) {
+      if (store.cards.some((c) => c.assignee?.sessionFile === sessionFile)) {
+        nextDispatchAt = Date.now() + queueConfig.cooldownSec * 1000
+        return
+      }
+    }
+  }
+
+  // Piggyback on the runtime-lifecycle listener: settle/exit releases the
+  // slot, arms the cooldown, and kicks the pump (which waits it out).
+  onAgentEvent((envelope) => {
+    if (envelope.event.type !== 'agent_settled' && envelope.event.type !== 'runtime_exit') return
+    const sessionFile = sessionFileForRuntime(envelope.runtimeId)
+    if (!sessionFile) return
+    armCooldownIfKanbanSession(sessionFile)
+    scheduleQueuePump()
+  })
+  // Store changes (enqueue from GUI/bridge/external writers) and a 1s ticker
+  // (cooldown clock + missed-push safety net) both drive the pump.
+  queueKick = scheduleQueuePump
+  setInterval(() => void pump(), 1000).unref?.()
+  void loadQueueConfig().then(() => scheduleQueuePump())
+
+  server.register('kanban.queueConfig', async (params) => {
+    const patch = (params ?? {}) as Partial<QueueConfig>
+    if (patch.enabled !== undefined) queueConfig.enabled = patch.enabled === true
+    if (patch.concurrency !== undefined) queueConfig.concurrency = Math.min(4, Math.max(1, Number(patch.concurrency) || 1))
+    if (patch.cooldownSec !== undefined) queueConfig.cooldownSec = Math.min(600, Math.max(0, Number(patch.cooldownSec) || 0))
+    await saveQueueConfig()
+    scheduleQueuePump()
+    return { ...queueConfig }
   })
 }

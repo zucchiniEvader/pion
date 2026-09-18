@@ -10,7 +10,7 @@ import { dirname, join } from 'node:path'
 import { mkdir, open, readFile, rm } from 'node:fs/promises'
 import { watch, type FSWatcher } from 'node:fs'
 import { randomBytes } from 'node:crypto'
-import type { KanbanBoard, KanbanCard, KanbanEvent } from '../src/types'
+import type { KanbanActor, KanbanBoard, KanbanCard, KanbanEvent } from '../src/types'
 import { applyKanbanEvent, parseKanbanEventLine, replayKanbanEvents } from '../src/lib/kanbanReducer'
 
 const KANBAN_DIR = ['.pion', 'kanban'] as const
@@ -216,6 +216,22 @@ export class KanbanStore {
   async archive(cardId: string): Promise<void> {
     this.card(cardId)
     await this.append({ v: 1, type: 'card_archived', id: cardId, ts: this.nowIso() })
+  }
+
+  /** Adds the card to the global auto-dispatch queue (P3). Idempotent:
+   * re-enqueue refreshes enqueuedAt — acceptable; the queue takes the
+   * oldest first either way. */
+  async enqueue(cardId: string, by: KanbanActor = 'user'): Promise<KanbanCard> {
+    this.card(cardId)
+    await this.append({ v: 1, type: 'card_enqueued', id: cardId, by, ts: this.nowIso() })
+    return this.card(cardId)
+  }
+
+  /** Removes the card from the queue (fold clears `queued`). */
+  async dequeue(cardId: string, by: KanbanActor = 'user'): Promise<KanbanCard> {
+    this.card(cardId)
+    await this.append({ v: 1, type: 'card_dequeued', id: cardId, by, ts: this.nowIso() })
+    return this.card(cardId)
   }
 
   /** Called by main when the runtime pool changed: cards may need a push. */

@@ -85,6 +85,9 @@ export const IPC = {
   KANBAN_NOTE: 'kanban:note',
   KANBAN_ASSIGN: 'kanban:assign',
   KANBAN_ARCHIVE: 'kanban:archive',
+  KANBAN_ENQUEUE: 'kanban:enqueue',
+  KANBAN_DEQUEUE: 'kanban:dequeue',
+  KANBAN_QUEUE_CONFIG: 'kanban:queue-config',
   KANBAN_DISPATCH: 'kanban:dispatch',
   /** Moves an unassigned card into a project store (execution-time gate). */
   KANBAN_MOVE_PROJECT: 'kanban:move-project',
@@ -632,6 +635,11 @@ export interface KanbanCard {
   assignee?: { sessionFile?: string; model?: string; label?: string }
   runState: CardRunState
   notes: KanbanNote[]
+  /** In the global auto-dispatch queue (card_enqueued/card_dequeued events;
+   * membership = queued && status 'todo'; any move out of todo consumes it). */
+  queued?: boolean
+  /** ts of the card_enqueued event — the global queue's ordering key. */
+  enqueuedAt?: string
   /** Archived cards stay in the log for audit; hidden by default on the board. */
   archived?: boolean
   /**
@@ -689,6 +697,8 @@ export type KanbanEvent =
   | { v: 1; type: 'card_updated'; id: string; title?: string; body?: string; acceptance?: string[]; ts: string }
   | { v: 1; type: 'card_moved'; id: string; to: CardStatus; by: KanbanActor; ts: string }
   | { v: 1; type: 'card_assigned'; id: string; sessionFile?: string; model?: string; label?: string; ts: string }
+  | { v: 1; type: 'card_enqueued'; id: string; by: KanbanActor; ts: string }
+  | { v: 1; type: 'card_dequeued'; id: string; by: KanbanActor; ts: string }
   | { v: 1; type: 'note_added'; id: string; note: KanbanNote; ts: string }
   | { v: 1; type: 'card_archived'; id: string; ts: string }
 
@@ -716,6 +726,17 @@ export interface KanbanDispatchInput {
   fresh: boolean
   sessionFile?: string
   modelId?: string
+}
+
+/** Global auto-dispatch queue config (daemon-owned, <userData>/queue.json). */
+export interface KanbanQueueConfig {
+  enabled: boolean
+  /** Max concurrently running dispatched sessions (1–4, pinned to the
+   * runtime pool limit). */
+  concurrency: number
+  /** Quiet period after a dispatched task ends before the next auto
+   * dispatch starts (seconds, 0–600). */
+  cooldownSec: number
 }
 
 export interface KanbanChangeEvent {
@@ -918,6 +939,9 @@ export interface PiGuiApi {
     note: (projectPath: string, cardId: string, text: string) => Promise<KanbanCard>
     assign: (projectPath: string, cardId: string, input: KanbanAssignInput) => Promise<KanbanCard>
     archive: (projectPath: string, cardId: string) => Promise<void>
+    enqueue: (projectPath: string, cardId: string) => Promise<KanbanCard>
+    dequeue: (projectPath: string, cardId: string) => Promise<KanbanCard>
+    queueConfig: (patch?: Partial<KanbanQueueConfig>) => Promise<KanbanQueueConfig>
     dispatch: (projectPath: string, cardId: string, input: KanbanDispatchInput) => Promise<RuntimeInfo>
     /** Moves an unassigned card into a project store (same id, history kept). */
     moveProject: (projectPath: string, cardId: string, toProjectPath: string) => Promise<KanbanCard>

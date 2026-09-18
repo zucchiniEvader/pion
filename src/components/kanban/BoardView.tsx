@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
-import { Archive, Plus } from 'lucide-react'
-import type { CardStatus, KanbanCard, ProjectRecord, SettingsRuntime } from '@/types'
+import { useEffect, useMemo, useState } from 'react'
+import { Archive, ListOrdered, Plus } from 'lucide-react'
+import type { CardStatus, KanbanCard, KanbanQueueConfig, ProjectRecord, SettingsRuntime } from '@/types'
 import { KANBAN_UNASSIGNED } from '@/types'
 import { KANBAN_STATUSES } from '@/lib/kanbanReducer'
 import { STATUS_KEY, STATUS_STYLE } from '@/components/kanban/status-style'
@@ -54,6 +54,30 @@ export function BoardView({ projects, runtimes, kanban, onViewSession }: BoardVi
 
   const openCard = openCardId ? allCards.find((c) => c.id === openCardId) ?? null : null
 
+  // ── Global auto-dispatch queue (P3) ──
+  const [queueCfg, setQueueCfg] = useState<KanbanQueueConfig | null>(null)
+  const [queuePanelOpen, setQueuePanelOpen] = useState(false)
+  useEffect(() => {
+    void window.pi.kanban.queueConfig().then(setQueueCfg).catch(() => undefined)
+  }, [])
+  const patchQueue = async (patch: Partial<KanbanQueueConfig>) => {
+    try {
+      setQueueCfg(await window.pi.kanban.queueConfig(patch))
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : String(e))
+    }
+  }
+  // Global queue order across every board (not the current filter): position
+  // feeds the cards' #n badge.
+  const queueOrder = useMemo(() => {
+    const order = new Map<string, number>()
+    kanban.allCards
+      .filter((c) => c.queued && c.status === 'todo' && !c.archived)
+      .sort((a, b) => ((a.enqueuedAt ?? '') < (b.enqueuedAt ?? '') ? -1 : 1))
+      .forEach((c, i) => order.set(c.id, i + 1))
+    return order
+  }, [kanban.allCards])
+
   const createCard = async (input: { projectPath: string; title: string; body?: string; acceptance?: string[] }) => {
     await window.pi.kanban.create(input.projectPath, { title: input.title, body: input.body, acceptance: input.acceptance })
     await refreshProject(input.projectPath)
@@ -90,9 +114,25 @@ export function BoardView({ projects, runtimes, kanban, onViewSession }: BoardVi
           <Plus size={13} strokeWidth={2} />
           {t('kanban.newCard')}
         </button>
+        {/* Global auto-dispatch queue: count badge + settings panel. */}
         <button
           className={cn(
             'ml-auto flex h-8 shrink-0 items-center gap-1.5 rounded-lg border-[0.5px] border-line px-2.5 text-xs transition-colors',
+            queuePanelOpen ? 'bg-fill-active text-ink' : 'text-ink2 hover:bg-fill-hover hover:text-ink',
+          )}
+          onClick={() => setQueuePanelOpen((v) => !v)}
+          title={t('kanban.queueTitle')}
+        >
+          <ListOrdered size={12} strokeWidth={1.75} />
+          {t('kanban.queue')}
+          {queueOrder.size > 0 && (
+            <span className="rounded bg-tint-accent px-1.5 text-[10px] font-medium tabular-nums text-accent">{queueOrder.size}</span>
+          )}
+          {queueCfg && !queueCfg.enabled && <span className="text-[10px]">⏸</span>}
+        </button>
+        <button
+          className={cn(
+            'flex h-8 shrink-0 items-center gap-1.5 rounded-lg border-[0.5px] border-line px-2.5 text-xs transition-colors',
             showArchived ? 'bg-fill-active text-ink' : 'text-ink2 hover:bg-fill-hover hover:text-ink',
           )}
           onClick={() => setShowArchived((v) => !v)}
@@ -102,6 +142,44 @@ export function BoardView({ projects, runtimes, kanban, onViewSession }: BoardVi
           {t('kanban.archived')}
         </button>
       </div>
+      {queuePanelOpen && queueCfg && (
+        <div className="flex shrink-0 flex-wrap items-center gap-3 border-b-[0.5px] border-line bg-panel px-4 py-2 text-xs text-ink2">
+          <label className="flex items-center gap-1.5" title={t('kanban.queueEnabledTitle')}>
+            <input
+              type="checkbox"
+              checked={queueCfg.enabled}
+              onChange={(e) => void patchQueue({ enabled: e.target.checked })}
+              className="size-3.5"
+            />
+            {t('kanban.queueEnabled')}
+          </label>
+          <label className="flex items-center gap-1.5" title={t('kanban.queueConcurrencyTitle')}>
+            {t('kanban.queueConcurrency')}
+            <select
+              value={queueCfg.concurrency}
+              onChange={(e) => void patchQueue({ concurrency: Number(e.target.value) })}
+              className="h-7 rounded-lg border-[0.5px] border-line bg-canvas px-1.5 text-xs text-ink outline-none"
+            >
+              {[1, 2, 3, 4].map((n) => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+          </label>
+          <label className="flex items-center gap-1.5" title={t('kanban.queueCooldownTitle')}>
+            {t('kanban.queueCooldown')}
+            <select
+              value={queueCfg.cooldownSec}
+              onChange={(e) => void patchQueue({ cooldownSec: Number(e.target.value) })}
+              className="h-7 rounded-lg border-[0.5px] border-line bg-canvas px-1.5 text-xs text-ink outline-none"
+            >
+              {[0, 15, 30, 45, 60, 120, 300].map((n) => (
+                <option key={n} value={n}>{n === 0 ? t('kanban.queueCooldownOff') : `${n}s`}</option>
+              ))}
+            </select>
+          </label>
+          <span className="ml-auto text-[10px]" title={t('kanban.queueHint')}>{t('kanban.queueHint')}</span>
+        </div>
+      )}
       {(error ?? actionError) && (
         <p className="shrink-0 border-t-[0.5px] border-bad/30 bg-tint-bad px-4 py-1.5 text-[11px] text-bad">{ue(error ?? actionError)}</p>
       )}
@@ -123,6 +201,7 @@ export function BoardView({ projects, runtimes, kanban, onViewSession }: BoardVi
                 <KanbanCardView
                   key={card.id}
                   card={card}
+                  queuePosition={queueOrder.get(card.id)}
                   // Project tags carry information in the aggregated view.
                   projectName={filter === 'all' && card.projectPath ? nameByPath.get(card.projectPath) : undefined}
                   onOpen={() => setOpenCardId(card.id)}
@@ -159,6 +238,12 @@ export function BoardView({ projects, runtimes, kanban, onViewSession }: BoardVi
           onDispatch={async (input) => {
             await window.pi.kanban.dispatch(openCard.projectPath!, openCard.id, input)
             await refreshProject(openCard.projectPath!)
+          }}
+          onEnqueue={async (enqueue) => {
+            const p = openCard.projectPath!
+            if (enqueue) await window.pi.kanban.enqueue(p, openCard.id)
+            else await window.pi.kanban.dequeue(p, openCard.id)
+            await refreshProject(p)
           }}
           onMoveProject={async (toProjectPath) => {
             const from = openCard.projectPath!

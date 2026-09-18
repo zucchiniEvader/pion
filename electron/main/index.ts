@@ -324,6 +324,12 @@ function registerIpc(): void {
     route(projectPath).call('kanban.assign', { projectPath, cardId, input: input as never }))
   ipcMain.handle(IPC.KANBAN_ARCHIVE, async (_e, projectPath: string, cardId: string) =>
     route(projectPath).call('kanban.archive', { projectPath, cardId }))
+  ipcMain.handle(IPC.KANBAN_ENQUEUE, async (_e, projectPath: string, cardId: string) =>
+    route(projectPath).call('kanban.enqueue', { projectPath, cardId }))
+  ipcMain.handle(IPC.KANBAN_DEQUEUE, async (_e, projectPath: string, cardId: string) =>
+    route(projectPath).call('kanban.dequeue', { projectPath, cardId }))
+  ipcMain.handle(IPC.KANBAN_QUEUE_CONFIG, async (_e, patch: Record<string, unknown> | undefined) =>
+    route().call('kanban.queueConfig', patch ?? {}))
   ipcMain.handle(IPC.KANBAN_MOVE_PROJECT, async (_e, projectPath: string, cardId: string, toProjectPath: string) =>
     route(projectPath).call('kanban.moveProject', { projectPath, cardId, toProjectPath }))
   ipcMain.handle(IPC.KANBAN_DISPATCH, async (_e, projectPath: string, cardId: string, input: unknown) =>

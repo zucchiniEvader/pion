@@ -57,6 +57,10 @@ export function parseKanbanEventLine(line: string): KanbanEvent | null {
       if (raw.model !== undefined && typeof raw.model !== 'string') return null
       if (raw.label !== undefined && typeof raw.label !== 'string') return null
       return raw as unknown as KanbanEvent
+    case 'card_enqueued':
+    case 'card_dequeued':
+      if (!isActor(raw.by)) return null
+      return raw as unknown as KanbanEvent
     case 'note_added': {
       const note = raw.note as KanbanNote | undefined
       if (!note || typeof note !== 'object') return null
@@ -131,6 +135,29 @@ export function applyKanbanEvent(cards: KanbanCard[], event: KanbanEvent): Kanba
       if (index < 0) return cards
       const card = cloneCard(cards[index])
       card.status = event.to
+      // Dispatch consumes queue membership: any move out of todo (dispatch's
+      // in_progress, a report's review, a manual done) takes the card out of
+      // the auto-dispatch queue; moving back to todo does NOT re-queue it.
+      if (event.to !== 'todo') card.queued = false
+      card.updatedAt = event.ts
+      const next = cards.slice()
+      next[index] = card
+      return next
+    }
+    case 'card_enqueued': {
+      if (index < 0) return cards
+      const card = cloneCard(cards[index])
+      card.queued = true
+      card.enqueuedAt = event.ts
+      card.updatedAt = event.ts
+      const next = cards.slice()
+      next[index] = card
+      return next
+    }
+    case 'card_dequeued': {
+      if (index < 0) return cards
+      const card = cloneCard(cards[index])
+      card.queued = false
       card.updatedAt = event.ts
       const next = cards.slice()
       next[index] = card
@@ -164,6 +191,7 @@ export function applyKanbanEvent(cards: KanbanCard[], event: KanbanEvent): Kanba
       if (index < 0) return cards
       const card = cloneCard(cards[index])
       card.archived = true
+      card.queued = false
       card.updatedAt = event.ts
       const next = cards.slice()
       next[index] = card
@@ -219,6 +247,10 @@ export function cardToEvents(card: KanbanCard, ts: string): KanbanEvent[] {
       ...(card.assignee.label ? { label: card.assignee.label } : {}),
       ts,
     })
+  }
+  // Queue membership travels with the card on cross-store migration.
+  if (card.queued && card.status === 'todo') {
+    events.push({ v: 1, type: 'card_enqueued', id: card.id, by: 'system', ts: card.enqueuedAt || ts })
   }
   return events
 }

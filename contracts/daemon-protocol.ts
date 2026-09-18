@@ -23,6 +23,7 @@ import type {
   KanbanChangeEvent,
   KanbanCreateInput,
   KanbanDispatchInput,
+  KanbanQueueConfig,
   KanbanUpdateInput,
   PiEventEnvelope,
   ProjectRecord,
@@ -272,6 +273,9 @@ export interface DaemonMethodMap {
   'kanban.note': { params: { projectPath: string; cardId: string; text: string }; result: KanbanCard }
   'kanban.assign': { params: { projectPath: string; cardId: string; input: KanbanAssignInput }; result: KanbanCard }
   'kanban.archive': { params: { projectPath: string; cardId: string }; result: null }
+  'kanban.enqueue': { params: { projectPath: string; cardId: string }; result: KanbanCard }
+  'kanban.dequeue': { params: { projectPath: string; cardId: string }; result: KanbanCard }
+  'kanban.queueConfig': { params: Partial<KanbanQueueConfig>; result: KanbanQueueConfig }
   'kanban.dispatch': { params: { projectPath: string; cardId: string; input: KanbanDispatchInput }; result: RuntimeInfo }
   'kanban.moveProject': { params: { projectPath: string; cardId: string; toProjectPath: string }; result: KanbanCard }
 

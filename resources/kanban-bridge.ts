@@ -134,6 +134,36 @@ function appendEvent(cwd: string, event: Record<string, unknown>): Promise<void>
   return appendEventFile(join(cwd, EVENTS_REL), event);
 }
 
+// Shared queue ops (enqueue/dequeue land as events; the GUI's queue pump in
+// daemon/kanban.ts folds + dispatches them).
+async function enqueueOnBoard(
+  load: () => Promise<Map<string, BridgeCard>>,
+  append: (event: Record<string, unknown>) => Promise<void>,
+  cardId: string,
+): Promise<{ content: Array<{ type: "text"; text: string }>; details: Record<string, unknown> }> {
+  const card = (await load()).get(cardId)
+  if (!card) return { content: [{ type: "text", text: `看板中不存在卡片 ${cardId}。` }], details: { ok: false } }
+  await append({ type: "card_enqueued", id: cardId, by: "agent" })
+  return {
+    content: [{ type: "text", text: `卡片 ${cardId}（${card.title}）已加入自动执行队列，将由队列依次派发。` }],
+    details: { ok: true },
+  }
+}
+
+async function dequeueOnBoard(
+  load: () => Promise<Map<string, BridgeCard>>,
+  append: (event: Record<string, unknown>) => Promise<void>,
+  cardId: string,
+): Promise<{ content: Array<{ type: "text"; text: string }>; details: Record<string, unknown> }> {
+  const card = (await load()).get(cardId)
+  if (!card) return { content: [{ type: "text", text: `看板中不存在卡片 ${cardId}。` }], details: { ok: false } }
+  await append({ type: "card_dequeued", id: cardId, by: "agent" })
+  return {
+    content: [{ type: "text", text: `卡片 ${cardId} 已移出自动执行队列。` }],
+    details: { ok: true },
+  }
+}
+
 function registerWorkerTools(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "kanban_read",
@@ -201,6 +231,33 @@ function registerWorkerTools(pi: ExtensionAPI): void {
       );
     },
   });
+
+  pi.registerTool({
+    name: "kanban_enqueue",
+    label: "Kanban Enqueue",
+    description: "把任务卡加入自动执行队列：队列会按顺序自动派发执行（todo 状态的卡才会被派发）。",
+    parameters: Type.Object({
+      cardId: Type.String({ description: "任务卡 id" }),
+    }),
+    promptGuidelines: [
+      "发现后续工作需要排队执行时，建卡后用 kanban_enqueue 加入队列，不要自行开始执行队列里的其他卡。",
+    ],
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      return enqueueOnBoard(() => readCards(ctx.cwd), (ev) => appendEvent(ctx.cwd, ev), params.cardId)
+    },
+  })
+
+  pi.registerTool({
+    name: "kanban_dequeue",
+    label: "Kanban Dequeue",
+    description: "把任务卡移出自动执行队列。",
+    parameters: Type.Object({
+      cardId: Type.String({ description: "任务卡 id" }),
+    }),
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      return dequeueOnBoard(() => readCards(ctx.cwd), (ev) => appendEvent(ctx.cwd, ev), params.cardId)
+    },
+  })
 }
 
 // Shared report semantics (worker = cwd board, manager = named board).
@@ -442,6 +499,39 @@ function registerManagerTools(pi: ExtensionAPI, dataDir: string): void {
         (ev) => appendEventFile(resolved.file, ev),
         ctx,
       );
+    },
+  });
+
+  pi.registerTool({
+    name: "kanban_enqueue",
+    label: "Kanban Enqueue",
+    description: "把任务卡加入自动执行队列：队列会按顺序自动派发执行（todo 状态的卡才会被派发）。",
+    parameters: Type.Object({
+      board: Type.String({ description: '看板名称(项目名或 "unassigned")' }),
+      cardId: Type.String({ description: "任务卡 id" }),
+    }),
+    promptGuidelines: [
+      "把规划好的工作落成卡片并 kanban_enqueue 入队，队列会自动依次执行；不要自己代跡队列去执行别的卡。",
+    ],
+    async execute(_toolCallId, params) {
+      const resolved = await resolveBoard(params.board);
+      if ("error" in resolved) return { content: [{ type: "text", text: resolved.error }], details: { ok: false } };
+      return enqueueOnBoard(() => readCardsFromFile(resolved.file), (ev) => appendEventFile(resolved.file, ev), params.cardId)
+    },
+  });
+
+  pi.registerTool({
+    name: "kanban_dequeue",
+    label: "Kanban Dequeue",
+    description: "把任务卡移出自动执行队列。",
+    parameters: Type.Object({
+      board: Type.String({ description: '看板名称(项目名或 "unassigned")' }),
+      cardId: Type.String({ description: "任务卡 id" }),
+    }),
+    async execute(_toolCallId, params) {
+      const resolved = await resolveBoard(params.board);
+      if ("error" in resolved) return { content: [{ type: "text", text: resolved.error }], details: { ok: false } };
+      return dequeueOnBoard(() => readCardsFromFile(resolved.file), (ev) => appendEventFile(resolved.file, ev), params.cardId)
     },
   });
 }
