@@ -1,29 +1,23 @@
-// Assembles release/daemon-cli/ — the directory to publish verbatim on the
-// static download server (docs/remote-install.md §托管与发布):
+// Assembles release/daemon-cli/install.sh — the ONE published daemon asset.
 //
-//   pion-daemon                  shebang bundle (pure JS, node >= 18)
-//   resources/*.ts               bundled extensions → ~/.pion/share on install
-//   install.sh / uninstall.sh    one-line installers (__DL_BASE__ baked via --dl-base)
-//   manifest.json                version + sha256 + size per file (install.sh verifies)
+// The installer is self-contained: the payload (pion-daemon bundle, the two
+// bundled PI extensions, uninstall.sh) is embedded into scripts/install.sh as
+// quoted heredocs and the sha256s/version are baked into its variable block.
+// Heredocs are what make `curl install.sh | sh` work — stdin has no $0 to
+// re-read, so the payload must ride inside the script text itself. All four
+// payload files are text, so no base64/tar layer is needed.
 //
-// Usage: node scripts/package-daemon.mjs [--dl-base https://dl.example] [--skip-build]
-// --dl-base is the URL of the published directory itself (no suffix needed when
-// the server root points straight at it).
-// Then publish, e.g.:  rsync -av --delete release/daemon-cli/ user@server:/srv/www/pion-daemon/
+// Usage: node scripts/package-daemon.mjs [--skip-build]
+// Output: release/daemon-cli/install.sh (single file, ~size of the bundle).
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { chmodSync, copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
 const args = process.argv.slice(2)
-const flag = (name) => {
-  const i = args.indexOf(name)
-  return i >= 0 ? args[i + 1] : undefined
-}
-const DL_BASE = flag('--dl-base') ?? ''
-const OUT = resolve(flag('--out') ?? 'release/daemon-cli')
+const OUT = resolve('release/daemon-cli')
 
-if (!flag('--skip-build')) {
+if (!args.includes('--skip-build')) {
   const build = spawnSync(process.execPath, ['scripts/build-daemon.mjs'], { stdio: 'inherit' })
   if (build.status !== 0) process.exit(build.status ?? 1)
 }
@@ -34,34 +28,49 @@ if (!protocol) throw new Error('cannot read DAEMON_PROTOCOL from contracts/daemo
 const version = JSON.parse(readFileSync('package.json', 'utf8')).version
 
 rmSync(OUT, { recursive: true, force: true })
-mkdirSync(join(OUT, 'resources'), { recursive: true })
+mkdirSync(OUT, { recursive: true })
 
-copyFileSync('out/daemon/pion-daemon', join(OUT, 'pion-daemon'))
-chmodSync(join(OUT, 'pion-daemon'), 0o755)
-copyFileSync('resources/kanban-bridge.ts', join(OUT, 'resources', 'kanban-bridge.ts'))
-copyFileSync('resources/pion-commands.ts', join(OUT, 'resources', 'pion-commands.ts'))
-
-for (const script of ['install.sh', 'uninstall.sh']) {
-  const body = readFileSync(join('scripts', script), 'utf8')
-  writeFileSync(join(OUT, script), body.replaceAll('__DL_BASE__', DL_BASE), { mode: 0o755 })
+const payload = {
+  __PION_DAEMON__: readFileSync('out/daemon/pion-daemon', 'utf8'),
+  __KANBAN_BRIDGE__: readFileSync('resources/kanban-bridge.ts', 'utf8'),
+  __PION_COMMANDS__: readFileSync('resources/pion-commands.ts', 'utf8'),
+  __UNINSTALL__: readFileSync('scripts/uninstall.sh', 'utf8'),
 }
-
-const fileEntry = (path) => {
-  const buf = readFileSync(join(OUT, path))
-  return { sha256: createHash('sha256').update(buf).digest('hex'), size: buf.length }
+// A payload line that equals its own marker would terminate the heredoc early
+// and corrupt the script — refuse to package instead of shipping broken bytes.
+for (const [marker, body] of Object.entries(payload)) {
+  if (body.split('\n').includes(marker)) {
+    throw new Error(`payload file for ${marker} contains its own heredoc marker — pick another marker`)
+  }
 }
-const manifest = {
-  version,
-  protocol,
-  builtAt: new Date().toISOString(),
-  files: {
-    'pion-daemon': fileEntry('pion-daemon'),
-    'resources/kanban-bridge.ts': fileEntry('resources/kanban-bridge.ts'),
-    'resources/pion-commands.ts': fileEntry('resources/pion-commands.ts'),
-  },
-}
-writeFileSync(join(OUT, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n')
+const sha = (s) => createHash('sha256').update(s, 'utf8').digest('hex')
 
-console.log(`daemon-cli package ready: ${OUT} (v${version}, protocol ${protocol})`)
-if (!DL_BASE) console.log('note: install.sh has no baked download base — it will require PION_DL_BASE=<url> (pass --dl-base to bake one)')
-console.log(`publish:  rsync -av --delete ${OUT}/ <user>@<server>:<docroot>/daemon/`)
+// Heredoc extraction is exact: the file gets precisely the bytes between
+// `<<'MARKER'\n` and the terminating `\nMARKER\n` — i.e. body + one final
+// newline. Normalize each payload to that form and hash the SAME string, so
+// the installer's checksum always matches what extraction produces.
+const normalized = {}
+for (const [marker, body] of Object.entries(payload)) normalized[marker] = body.replace(/\n+$/, '') + '\n'
+
+let script = readFileSync('scripts/install.sh', 'utf8')
+// Heredoc bodies: insert the payload between the `<<'MARKER'` line and the
+// closing `MARKER` line (the template ships with an empty body). Replacer
+// FUNCTIONS only — a string replacement would interpret $&/$' sequences,
+// and the bundle's JS is full of $.
+for (const marker of Object.keys(payload)) {
+  const open = new RegExp(`(<<'${marker}'\\n)${marker}\\n`)
+  if (!open.test(script)) throw new Error(`install.sh template has no empty ${marker} heredoc`)
+  script = script.replace(open, (_m, head) => head + normalized[marker].replace(/\n$/, '') + `\n${marker}\n`)
+}
+// Baked values: version + sha256 of each payload file (post-normalization —
+// what the installer's hash_of will actually see).
+const bake = (s, from, to) => s.split(from).join(to)
+script = bake(script, '__PION_PKG_VERSION__', version)
+script = bake(script, '__SHA_PION_DAEMON__', sha(normalized.__PION_DAEMON__))
+script = bake(script, '__SHA_KANBAN_BRIDGE__', sha(normalized.__KANBAN_BRIDGE__))
+script = bake(script, '__SHA_PION_COMMANDS__', sha(normalized.__PION_COMMANDS__))
+
+const out = join(OUT, 'install.sh')
+writeFileSync(out, script, { mode: 0o755 })
+chmodSync(out, 0o755)
+console.log(`packaged ${out} (${(statSync(out).size / 1024).toFixed(0)} KB, daemon v${version}, protocol ${protocol})`)

@@ -1,14 +1,17 @@
 #!/bin/sh
 # Pion daemon one-line installer (④ remote runtime, docs/remote-install.md).
 #
-#   curl -fsSL https://<server>/install.sh | sh
-#   PION_DL_BASE=https://<server> sh install.sh      # explicit base
+#   curl -fsSL https://<host>/install.sh | sh
 #
-# <server> = the URL of the directory this script is served from (docroot
-# points straight at the publish dir; add a path prefix only if yours has one).
+# SELF-CONTAINED: the payload (pion-daemon bundle, the two bundled PI
+# extensions, uninstall.sh) is embedded below as quoted heredocs and the
+# sha256s are baked into this script by scripts/package-daemon.mjs — nothing
+# is fetched at install time, so the piped-via-curl form works with no
+# download base and no second asset. (The heredoc trick is what makes
+# `curl | sh` viable: stdin has no $0 to re-read.)
 #
-# Installs to ~/.pion (override with PION_HOME), verifies sha256 against
-# manifest.json, registers the auto-start service via `pion-daemon install`
+# Installs to ~/.pion (override with PION_HOME), verifies the embedded
+# sha256s, registers the auto-start service via `pion-daemon install`
 # and prints the Host/Port/Token block to paste into Pion's settings.
 # PION_NO_SERVICE=1 skips service registration; PION_LISTEN / PION_LISTEN_WS
 # override the listen addresses (<host:port>). node-pty is installed by
@@ -16,40 +19,25 @@
 # A native build toolchain may be required when no prebuild is available.
 set -eu
 
-DL_BASE="${PION_DL_BASE:-__DL_BASE__}"
 PION_HOME="${PION_HOME:-$HOME/.pion}"
 BIN_DIR="$PION_HOME/bin"
 SHARE_DIR="$PION_HOME/share"
 
+# Baked by scripts/package-daemon.mjs (kept as plain assignments so the
+# heredoc quoting below never touches them).
+PION_PKG_VERSION=__PION_PKG_VERSION__
+SHA_PION_DAEMON=__SHA_PION_DAEMON__
+SHA_KANBAN_BRIDGE=__SHA_KANBAN_BRIDGE__
+SHA_PION_COMMANDS=__SHA_PION_COMMANDS__
+
 say() { printf '%s\n' "$*"; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
-
-# __DL_BASE__ below is baked by scripts/package-daemon.mjs (--dl-base). The
-# sentinel compares a SPLIT literal ("__DL_BASE""__") so the bake cannot turn
-# the check into a self-match — an unbaked installer still detects itself.
-DL_BASE="${PION_DL_BASE:-__DL_BASE__}"
-if [ "$DL_BASE" = "__DL_BASE""__" ] || [ -z "$DL_BASE" ]; then
-    die "download base unknown. This installer is served from a static mirror —
-       set PION_DL_BASE=https://<server> (this script's own directory URL; see
-       docs/remote-install.md)."
-fi
-DL_BASE="${DL_BASE%/}"
 
 # ── node >= 18 (the daemon is a pure-JS node program) ──────────────────────
 command -v node >/dev/null 2>&1 || die "node not found in PATH. Install Node.js >= 18 first
   (Debian/Ubuntu: apt install nodejs npm · RHEL: dnf install nodejs · macOS: brew install node · any: https://nodejs.org)"
 NODE_MAJOR=$(node -p 'process.versions.node.split(".")[0]')
 [ "$NODE_MAJOR" -ge 18 ] || die "node >= 18 required, found $(node --version)"
-
-fetch() { # fetch <url> <outfile>
-  if command -v curl >/dev/null 2>&1; then
-    curl -fsSL -o "$2" "$1"
-  elif command -v wget >/dev/null 2>&1; then
-    wget -qO "$2" "$1"
-  else
-    die "need curl or wget to download from $DL_BASE"
-  fi
-}
 
 hash_of() { # sha256 of <file> — GNU and BSD spellings
   if command -v sha256sum >/dev/null 2>&1; then
@@ -62,39 +50,34 @@ hash_of() { # sha256 of <file> — GNU and BSD spellings
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
-say "==> fetching manifest from $DL_BASE"
-fetch "$DL_BASE/manifest.json" "$TMP/manifest.json"
-# manifest.json is data we control, parsed with the node we just required.
-MANIFEST_VARS=$(node -e '
-const m = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
-console.log("PION_VERSION=" + JSON.stringify(String(m.version)));
-for (const [name, f] of Object.entries(m.files)) {
-  const key = "PION_SHA_" + name.toUpperCase().replace(/[^A-Z0-9]/g, "_");
-  console.log(key + "=" + JSON.stringify(String(f.sha256)));
-}
-' "$TMP/manifest.json") || die "manifest.json is not valid JSON"
-eval "$MANIFEST_VARS"
-[ -n "${PION_VERSION:-}" ] || die "manifest has no version"
+# Unbaked-sentinel: this source template lives in the repo; only the packaged
+# copy (release/daemon-cli/install.sh) carries the payload. Compare SPLIT
+# literals so baking can never turn the check into a self-match.
+[ "$PION_PKG_VERSION" = "__PION_PKG_""VERSION__" ] && die "installer not packaged — run scripts/package-daemon.mjs first"
 
-fetch_any() { # fetch_any <outfile> <url-preferred> <url-fallback>
-  # GitHub Releases assets are FLAT (no resources/ prefix); a static docroot
-  # serves the directory layout. Try the layout form first, then the flat one.
-  fetch "$2" "$1" || fetch "$3" "$1"
-}
+say "==> extracting pion-daemon $PION_PKG_VERSION (self-contained payload)"
+cat > "$TMP/pion-daemon" <<'__PION_DAEMON__'
+__PION_DAEMON__
+chmod 0755 "$TMP/pion-daemon"
+mkdir -p "$TMP/resources"
+cat > "$TMP/resources/kanban-bridge.ts" <<'__KANBAN_BRIDGE__'
+__KANBAN_BRIDGE__
+cat > "$TMP/resources/pion-commands.ts" <<'__PION_COMMANDS__'
+__PION_COMMANDS__
+cat > "$TMP/uninstall.sh" <<'__UNINSTALL__'
+__UNINSTALL__
 
-say "==> downloading pion-daemon $PION_VERSION"
-fetch "$DL_BASE/pion-daemon" "$TMP/pion-daemon"
-fetch_any "$TMP/kanban-bridge.ts" "$DL_BASE/resources/kanban-bridge.ts" "$DL_BASE/kanban-bridge.ts"
-fetch_any "$TMP/pion-commands.ts" "$DL_BASE/resources/pion-commands.ts" "$DL_BASE/pion-commands.ts"
-[ "$(hash_of "$TMP/pion-daemon")" = "${PION_SHA_PION_DAEMON:-}" ] || die "checksum mismatch: pion-daemon (delete and re-download manifest.json?)"
-[ "$(hash_of "$TMP/kanban-bridge.ts")" = "${PION_SHA_RESOURCES_KANBAN_BRIDGE_TS:-}" ] || die "checksum mismatch: kanban-bridge.ts"
-[ "$(hash_of "$TMP/pion-commands.ts")" = "${PION_SHA_RESOURCES_PION_COMMANDS_TS:-}" ] || die "checksum mismatch: pion-commands.ts"
+[ "$(hash_of "$TMP/pion-daemon")" = "$SHA_PION_DAEMON" ] || die "checksum mismatch: pion-daemon (download truncated?)"
+[ "$(hash_of "$TMP/resources/kanban-bridge.ts")" = "$SHA_KANBAN_BRIDGE" ] || die "checksum mismatch: kanban-bridge.ts"
+[ "$(hash_of "$TMP/resources/pion-commands.ts")" = "$SHA_PION_COMMANDS" ] || die "checksum mismatch: pion-commands.ts"
 
 mkdir -p "$BIN_DIR" "$SHARE_DIR/resources"
 cp "$TMP/pion-daemon" "$BIN_DIR/pion-daemon"
 chmod 0755 "$BIN_DIR/pion-daemon"
-cp "$TMP/kanban-bridge.ts" "$SHARE_DIR/resources/kanban-bridge.ts"
-cp "$TMP/pion-commands.ts" "$SHARE_DIR/resources/pion-commands.ts"
+cp "$TMP/resources/kanban-bridge.ts" "$SHARE_DIR/resources/kanban-bridge.ts"
+cp "$TMP/resources/pion-commands.ts" "$SHARE_DIR/resources/pion-commands.ts"
+cp "$TMP/uninstall.sh" "$BIN_DIR/uninstall.sh"
+chmod 0755 "$BIN_DIR/uninstall.sh"
 say "==> installed $BIN_DIR/pion-daemon"
 
 case ":$PATH:" in
@@ -147,3 +130,6 @@ else
   # shellcheck disable=SC2086 — INSTALL_ARGS is word-split on purpose
   "$BIN_DIR/pion-daemon" install $INSTALL_ARGS
 fi
+
+say ""
+say "uninstall: $BIN_DIR/uninstall.sh  (or: pion-daemon uninstall; --purge also deletes $PION_HOME)"
