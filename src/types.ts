@@ -55,6 +55,7 @@ export const IPC = {
   PROJECTS_LIST: 'projects:list',
   PROJECTS_ADD: 'projects:add',
   PROJECTS_REMOVE: 'projects:remove',
+  PROJECTS_SET_KANBAN_TOOLS: 'projects:set-kanban-tools',
   PROJECTS_EXTENSIONS: 'projects:extensions',
   /** Candidate project dirs on a runtime's machine (remote add flow). */
   PROJECTS_DISCOVER: 'projects:discover',
@@ -244,6 +245,11 @@ export interface ProjectRecord {
    * sidebar's temp-chat group; removal also deletes the workspace dir and
    * its PI session files. Absent on normal projects. */
   kind?: 'temp'
+  /** Project opted into AI kanban tools: every non-dispatch start of this
+   * project's sessions attaches the kanban-bridge in manager mode (the
+   * sidebar's project menu toggles it). Dispatch/review-forwarding keeps the
+   * worker toolset bound to the card's board. */
+  kanbanTools?: boolean
   /** ④: owning runtime id ('local' or a settings runtime id), assigned by the
    * main proxy from the serving connection; absent on pre-v2 records. */
   runtime?: string
@@ -846,6 +852,8 @@ export interface PiGuiApi {
     list: () => Promise<ProjectRecord[]>
     add: (path: string) => Promise<ProjectRecord>
     remove: (id: string) => Promise<void>
+    /** Toggle AI kanban tools (manager-mode bridge) for a project's sessions. */
+    setKanbanTools: (path: string, enabled: boolean) => Promise<void>
     /** File names of the project's own extensions (<project>/.pi/extensions). */
     extensions: (projectPath: string) => Promise<string[]>
     /** Candidate project directories on a runtime (its machine's session

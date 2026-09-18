@@ -291,6 +291,7 @@ const api: PiGuiApi = {
     list: () => invoke<ProjectRecord[]>(IPC.PROJECTS_LIST),
     add: (path) => invoke<ProjectRecord>(IPC.PROJECTS_ADD, path),
     remove: (id) => invoke<void>(IPC.PROJECTS_REMOVE, id),
+    setKanbanTools: (path, enabled) => invoke<void>(IPC.PROJECTS_SET_KANBAN_TOOLS, path, enabled),
     extensions: (projectPath) => invoke<string[]>(IPC.PROJECTS_EXTENSIONS, projectPath),
     discover: (runtimeId) => invoke<string[]>(IPC.PROJECTS_DISCOVER, runtimeId === undefined ? undefined : assertNonEmptyString(runtimeId, 'runtimeId')),
     /** Adds a project to a specific runtime's daemon (remote add flow).

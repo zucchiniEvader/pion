@@ -206,6 +206,7 @@ export interface DaemonMethodMap {
    * A daemon never sees it (it only ever knows its own machine). */
   'projects.add': { params: { path: string; runtimeId?: string }; result: ProjectRecord & RuntimeAttachment }
   'projects.remove': { params: { id: string }; result: null }
+  'projects.setKanbanTools': { params: { path: string; enabled: boolean }; result: null }
   'projects.extensions': { params: { projectPath: string }; result: string[] }
   /** v2: enumerate candidate project directories on THIS machine — dirs that
    * directly contain PI session buckets, newest first. Remote clients offer

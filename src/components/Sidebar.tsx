@@ -70,6 +70,8 @@ interface SidebarProps {
   /** Deletes a temp-chat session: removes its throwaway workspace (dir + PI
    * session files) via projects.remove on the owning temp project. */
   onDeleteTempSession: (session: SessionRecord) => void
+  /** Toggle AI kanban tools (manager-mode bridge) for a project's sessions. */
+  onToggleKanbanTools: (project: ProjectRecord) => void
   onRenameSession: (session: SessionRecord, name: string) => void
   /** Moves a tracked session into the archive group (registry only). */
   onArchiveSession: (session: SessionRecord) => void
@@ -114,6 +116,7 @@ export function Sidebar({
   onToggleBoard,
   onNewTaskForProject,
   onDeleteTempSession,
+  onToggleKanbanTools,
   onRenameSession,
   onArchiveSession,
   onUnarchiveSession,
@@ -423,6 +426,28 @@ export function Sidebar({
                             >
                               <ExternalLink size={13} strokeWidth={1.75} className="shrink-0 text-ink2" />
                               {t('sidebar.showInFinder')}
+                            </button>
+                            {/* AI 看板工具开关：开启后该项目的会话(非派发)附带
+                                kanban-bridge 管理员模式;对已在池中的旧 runtime
+                                在下次打开时自动换血。 */}
+                            <button
+                              className="flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5 text-left text-xs text-ink transition-colors hover:bg-fill-hover"
+                              title={t('sidebar.kanbanToolsHint')}
+                              onClick={() => {
+                                setMenuPath(null)
+                                onToggleKanbanTools(p)
+                              }}
+                            >
+                              <SquareKanban size={13} strokeWidth={1.75} className="shrink-0 text-ink2" />
+                              <span className="min-w-0 flex-1">{t('sidebar.kanbanTools')}</span>
+                              <span
+                                className={cn(
+                                  'shrink-0 rounded px-1.5 py-px text-[10px] font-medium',
+                                  p.kanbanTools ? 'bg-tint-accent text-accent' : 'bg-fill-hover text-ink2',
+                                )}
+                              >
+                                {p.kanbanTools ? t('sidebar.kanbanToolsOn') : t('sidebar.kanbanToolsOff')}
+                              </span>
                             </button>
                             <div className="mt-1 border-t-[0.5px] border-line pt-1 pb-0.5">
                               {confirmRemove ? (

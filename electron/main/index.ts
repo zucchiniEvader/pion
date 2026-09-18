@@ -236,6 +236,8 @@ function registerIpc(): void {
   })
   ipcMain.handle(IPC.PROJECTS_EXTENSIONS, async (_e, projectPath: string) => route(projectPath).call('projects.extensions', { projectPath }))
   ipcMain.handle(IPC.PROJECTS_REMOVE, async (_e, id: string) => route(id).call('projects.remove', { id }))
+  ipcMain.handle(IPC.PROJECTS_SET_KANBAN_TOOLS, async (_e, path: string, enabled: boolean) =>
+    route(path).call('projects.setKanbanTools', { path, enabled }))
   ipcMain.handle(IPC.PROJECTS_DISCOVER, async (_e, runtimeId?: string) => {
     const conn = runtimeId ? daemons.getConnection(runtimeId) : daemons.localConnection
     if (!conn) throw new Error(`Unknown runtime: ${runtimeId}`)

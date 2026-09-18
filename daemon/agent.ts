@@ -14,13 +14,26 @@ import { join } from 'node:path'
 import type { AgentStartOptions, PiEvent, PiEventEnvelope, RpcCommand, RpcResponse, RuntimeInfo } from '../src/types'
 import { PiRpcRuntime, detectPi, invalidatePiDetection, isExtensionLoadFailure } from './pi-rpc'
 import { piSessionRoot, sessionBucket, trackSession } from './sessions'
-import { createTempWorkspace, isTempWorkspacePath } from './projects'
+import { createTempWorkspace, isTempWorkspacePath, projectWantsKanbanTools } from './projects'
 import { kanbanBridgePath } from './kanban'
 import { DaemonRpcError, type DaemonServer } from './server'
 
 const runtimes = new Map<string, PiRpcRuntime>()
 // Session file → owning runtime, so at most one writable runtime per session.
 const sessionRuntimeByFile = new Map<string, string>()
+// Extensions each live runtime was STARTED with (the caller-requested set as
+// derived in startRuntime — incl. the manager bridge). Reuse of a pooled
+// runtime requires every requested extension to be present: a runtime
+// spawned without -e can never serve dispatch/manager tool calls.
+const runtimeStartExtensions = new Map<string, Set<string>>()
+function setRuntimeExtensions(id: string, extensions: string[] | undefined): void {
+  runtimeStartExtensions.set(id, new Set(extensions ?? []))
+}
+function runtimeHasExtensions(id: string, extensions: string[] | undefined): boolean {
+  if (!extensions?.length) return true
+  const started = runtimeStartExtensions.get(id)
+  return !!started && extensions.every((e) => started.has(e))
+}
 // Runtime pool: switching sessions re-attaches to live runtimes instead of
 // respawning PI; the session JSONL on disk stays the source of truth for
 // whatever happened while a runtime ran in the background.
@@ -145,6 +158,7 @@ function forwardRuntimeEvent(envelope: PiEventEnvelope): void {
 function handleRuntimeExit(rt: PiRpcRuntime): void {
   prewarmed.delete(rt.runtimeId)
   runtimes.delete(rt.runtimeId)
+  runtimeStartExtensions.delete(rt.runtimeId)
   for (const [file, rid] of sessionRuntimeByFile) {
     if (rid === rt.runtimeId) sessionRuntimeByFile.delete(file)
   }
@@ -161,8 +175,10 @@ async function discardPrewarm(id: string): Promise<void> {
 /** Boots a blank prewarm for the project if none is waiting (fire-and-forget). */
 export async function ensurePrewarm(projectPath: string): Promise<void> {
   // Temp workspaces never prewarm: each is a one-session throwaway dir, a
-  // parked blank runtime there is a wasted pool slot.
-  if (isTempWorkspacePath(projectPath)) return
+  // parked blank runtime there is a wasted pool slot. Kanban-tools projects:
+  // every start carries the manager bridge, so a bridgeless prewarm could
+  // never be adopted — it would just be a wasted spawn.
+  if (isTempWorkspacePath(projectPath) || (await projectWantsKanbanTools(projectPath))) return
   for (const [, p] of prewarmed) if (p.projectPath === projectPath) return
   if (prewarmInFlight.has(projectPath)) return
   prewarmInFlight.add(projectPath)
@@ -297,15 +313,21 @@ export async function startRuntime(input: AgentStartOptions): Promise<RuntimeInf
   }
   // EVERY start on a temp workspace carries the manager bridge — including
   // reopens (projectPath = the temp dir, no temp flag), so a temp session can
-  // never lose its kanban tools. The bridge resolves boards BY NAME from the
-  // daemon-written index under PION_DATA_DIR; env never crosses the wire from
-  // the renderer (main's trust boundary strips _env like extensions).
-  if (isTempWorkspacePath(options.projectPath)) {
+  // never lose its kanban tools. Workspace projects get the same manager
+  // toolset when the project record opts in (projects.setKanbanTools) — EXCEPT
+  // starts that carry explicit caller extensions (kanban dispatch / review
+  // forwarding): those want the worker toolset bound to the card's board.
+  // The bridge resolves boards BY NAME from the daemon-written index under
+  // PION_DATA_DIR; env never crosses the wire from the renderer (main's trust
+  // boundary strips _env like extensions).
+  if (!options.extensions?.length && (isTempWorkspacePath(options.projectPath) || (await projectWantsKanbanTools(options.projectPath)))) {
     const bridge = kanbanBridgePath()
-    options = {
-      ...options,
-      extensions: bridge ? [...(options.extensions ?? []), bridge] : (options.extensions ?? []),
-      _env: { ...(options._env ?? {}), PION_KANBAN_MODE: 'manager', PION_DATA_DIR: userDataDir },
+    if (existsSync(bridge)) {
+      options = {
+        ...options,
+        extensions: [...(options.extensions ?? []), bridge],
+        _env: { ...(options._env ?? {}), PION_KANBAN_MODE: 'manager', PION_DATA_DIR: userDataDir },
+      }
     }
   }
   // Follow the bucket this runtime writes to so its session list stays live.
@@ -327,22 +349,21 @@ async function performStart(options: AgentStartOptions): Promise<RuntimeInfo> {
   const detected = await detectPi()
   if (!detected.path) throw new Error('PI executable was not found. Install pi and try again.')
   if (options.sessionPath) {
-    // Dispatch (extensions requested) needs a bridge-carrying runtime; a
-    // pooled runtime started without -e can never report, so it is not reused.
-    // EXCEPT temp workspaces: every temp start carries the SAME manager bridge
-    // (injected in startRuntime), so a pooled temp runtime is always
-    // bridge-carrying — refusing reuse would make reopening a live temp
-    // session die on the single-writer guard below.
+    // Reuse requires the pooled runtime to carry every requested extension —
+    // dispatch and manager-mode starts need a bridge-carrying runtime, and a
+    // runtime spawned without -e can never report. Temp workspaces: every
+    // start attaches the SAME manager bridge (injected in startRuntime), so
+    // compatibility is guaranteed there; general starts compare against the
+    // runtime's recorded start set.
     const existingId = sessionRuntimeByFile.get(options.sessionPath)
-    const existing = existingId && (!options.extensions?.length || isTempWorkspacePath(options.projectPath))
-      ? runtimes.get(existingId)
-      : undefined
-    if (existing) {
+    const live = existingId ? runtimes.get(existingId) : undefined
+    const reusable = !!live && (!options.extensions?.length || isTempWorkspacePath(options.projectPath) || runtimeHasExtensions(existingId!, options.extensions))
+    if (live && reusable) {
       // Re-attach: PI has kept running this session in the background. A
       // fresh get_state is the authoritative streaming/model snapshot — the
       // cached event flags can go stale around aborts.
       try {
-        const info = await existing.handshake()
+        const info = await live.handshake()
         runtimeLastUsedAt.set(existingId!, Date.now())
         // A live session is a working session: clear any crash marking.
         onSessionRestarted(options.sessionPath)
@@ -352,7 +373,17 @@ async function performStart(options: AgentStartOptions): Promise<RuntimeInfo> {
         runtimeLastUsedAt.delete(existingId!)
         sessionRuntimeByFile.delete(options.sessionPath)
       }
-    } else {
+    } else if (live) {
+      // Incompatible live runtime — e.g. kanban tools were enabled for the
+      // project after this runtime spawned. An idle one is stopped and
+      // replaced by a bridge-carrying cold spawn below; a streaming one keeps
+      // the single-writer protection (never abort a running conversation).
+      if (live.snapshot().isStreaming) throw new Error('That session already has an active runtime.')
+      runtimes.delete(existingId!)
+      runtimeStartExtensions.delete(existingId!)
+      sessionRuntimeByFile.delete(options.sessionPath)
+      void live.stop()
+    } else if (existingId) {
       sessionRuntimeByFile.delete(options.sessionPath)
     }
   }
@@ -402,6 +433,8 @@ async function performStart(options: AgentStartOptions): Promise<RuntimeInfo> {
           }
           entry.pendingStatuses.clear()
           runtimes.set(entry.runtime.runtimeId, entry.runtime)
+          // A prewarm carries no caller-requested extensions by construction.
+          setRuntimeExtensions(entry.runtime.runtimeId, [])
           sessionRuntimeByFile.set(info.sessionFile, entry.runtime.runtimeId)
           onSessionRestarted(info.sessionFile)
           runtimeLastUsedAt.set(entry.runtime.runtimeId, Date.now())
@@ -436,6 +469,7 @@ async function performStart(options: AgentStartOptions): Promise<RuntimeInfo> {
   }
   const { runtime, info } = spawned
   runtimes.set(runtime.runtimeId, runtime)
+  setRuntimeExtensions(runtime.runtimeId, options.extensions)
   runtimeLastUsedAt.set(runtime.runtimeId, Date.now())
   if (info.sessionFile) {
     sessionRuntimeByFile.set(info.sessionFile, runtime.runtimeId)

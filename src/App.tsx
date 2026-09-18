@@ -839,6 +839,9 @@ export default function App() {
           onToggleBoard={() => setMainView((v) => (v === 'board' ? 'session' : 'board'))}
           onNewTaskForProject={(p) => void newTaskForProject(p)}
           onDeleteTempSession={(s) => void deleteTempSession(s)}
+          onToggleKanbanTools={(p) => {
+            void window.pi.projects.setKanbanTools(p.path, p.kanbanTools !== true).then(refreshProjects)
+          }}
           onRenameSession={renameSession}
           onArchiveSession={archiveSession}
           onUnarchiveSession={unarchiveSession}

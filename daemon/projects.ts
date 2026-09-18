@@ -104,6 +104,13 @@ export async function createTempWorkspace(): Promise<string> {
   return dir
 }
 
+/** True when the project opted into AI kanban tools (manager-mode bridge on
+ * every non-dispatch start). Read from the registry so ALL start paths
+ * (open/reopen/restart/cron) derive it without any renderer flag. */
+export async function projectWantsKanbanTools(projectPath: string): Promise<boolean> {
+  return (await loadProjects()).find((p) => p.path === projectPath)?.kanbanTools === true
+}
+
 // Board index consumed by the kanban-bridge in manager mode: the model may
 // only address boards BY NAME, and the name→file mapping comes exclusively
 // from this daemon-written file (never from model input). Refreshed at boot
@@ -284,6 +291,20 @@ export function registerProjectMethods(server: DaemonServer, userDataDir: string
       await rm(join(piSessionRoot(), sessionBucket(removed.path)), { recursive: true, force: true }).catch(() => undefined)
     }
     await writeKanbanBoardsIndex()
+    return null
+  })
+  server.register('projects.setKanbanTools', async (params) => {
+    const { path, enabled } = params as { path: string; enabled: boolean }
+    if (typeof path !== 'string' || !path) throw new Error('path must be a non-empty string')
+    if (typeof enabled !== 'boolean') throw new Error('enabled must be a boolean')
+    const projects = await loadProjects()
+    const record = projects.find((p) => p.path === path)
+    if (!record) throw new Error('Not a registered project.')
+    if (record.kind === 'temp') throw new Error('Temp chats always have kanban tools.')
+    if (record.kanbanTools !== enabled) {
+      record.kanbanTools = enabled
+      await saveProjects(projects)
+    }
     return null
   })
   server.register('projects.extensions', async (params) => {
