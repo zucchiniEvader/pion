@@ -49,16 +49,11 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - name: package daemon-cli + upload assets
+      - name: package daemon-cli + upload asset
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          node scripts/package-daemon.mjs --dl-base "https://github.com/${{ github.repository }}/releases/latest/download"
-          gh release upload "$GITHUB_REF_NAME" \
-            release/daemon-cli/install.sh \
-            release/daemon-cli/uninstall.sh \
-            release/daemon-cli/manifest.json \
-            release/daemon-cli/pion-daemon \
-            release/daemon-cli/resources/kanban-bridge.ts \
-            release/daemon-cli/resources/pion-commands.ts \
-            --clobber
+          # Self-contained installer: payload + sha256 embedded, no dl-base,
+          # no separate assets (scripts/package-daemon.mjs).
+          node scripts/package-daemon.mjs
+          gh release upload "$GITHUB_REF_NAME" release/daemon-cli/install.sh --clobber
