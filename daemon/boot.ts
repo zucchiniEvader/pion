@@ -147,7 +147,7 @@ export async function runDaemon(opts: BootOptions): Promise<void> {
   // M2-3: git + version-check (the full method table is now served).
   registerProjectMethods(server, userData)
   registerSessionMethods(server)
-  registerAgentMethods(server, resources)
+  registerAgentMethods(server, resources, userData)
   registerKanbanMethods(server, userData, resources)
   registerGitMethods(server)
   registerFsMethods(server)

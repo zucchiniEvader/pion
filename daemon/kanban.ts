@@ -108,7 +108,7 @@ function kanbanBoardWithRunState(projectPath: string): KanbanBoard {
 // boot (`--resources`; Electron main computes it — dev = repo resources/,
 // packaged = process.resourcesPath). Behavior-equivalent to the old
 // app.getAppPath()/process.resourcesPath probe in main.
-function kanbanBridgePath(): string {
+export function kanbanBridgePath(): string {
   return join(resourcesDir, 'kanban-bridge.ts')
 }
 

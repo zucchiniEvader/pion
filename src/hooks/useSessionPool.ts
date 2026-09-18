@@ -353,7 +353,10 @@ export function useSessionPool() {
           error: null,
           crashed: false,
           hydrating: shouldHydrate,
-          lastStart: options,
+          // Resolve the start options against what actually launched: a temp
+          // chat starts with projectPath '' (the daemon creates the workspace
+          // at start); restart must resume THAT workspace, not fork a new chat.
+          lastStart: { ...options, projectPath: info.cwd || options.projectPath, temp: undefined },
           lastSessionFile: info.sessionFile ?? s.lastSessionFile,
           startedAt: info.isStreaming ? (s.startedAt ?? Date.now()) : s.startedAt,
           exited: false,

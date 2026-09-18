@@ -8,7 +8,7 @@ import { useI18n, useUserErrorMessage } from '@/i18n'
 import type { MsgKey } from '@/i18n/zh'
 import { Input } from '@/components/ui/input'
 import { openImagePreview } from '@/components/ImageLightbox'
-import { ArrowUp, Brain, Check, ChevronDown, Compass, Cpu, FileText, Folder, FolderOpen, LoaderCircle, Square, X } from 'lucide-react'
+import { ArrowUp, Brain, Check, ChevronDown, Compass, Cpu, FileText, Folder, FolderOpen, LoaderCircle, MessageCircle, Square, X } from 'lucide-react'
 
 const FALLBACK_THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'max']
 
@@ -83,6 +83,9 @@ interface ComposerProps {
   // Draft-only: the project selector embedded in the composer card.
   projects: ProjectRecord[]
   activeProject: ProjectRecord | null
+  /** Temp-chat draft: no project will be picked — show the chat badge instead
+   * of the project selector, and never flash the pick-a-project hint. */
+  tempMode?: boolean
   /** Increments when the app wants the user to pick a project first. */
   nudgeSignal: number
   onSelectProject: (project: ProjectRecord) => void
@@ -158,6 +161,7 @@ export function Composer({
   extensionStatuses = [],
   projects,
   activeProject,
+  tempMode = false,
   nudgeSignal,
   onSelectProject,
   onBrowseProjects,
@@ -190,7 +194,7 @@ export function Composer({
     const timer = setTimeout(() => setProjectHint(false), 3000)
     return () => clearTimeout(timer)
   }, [nudgeSignal])
-  const showProjectHint = mode === 'draft' && projectHint && !activeProject
+  const showProjectHint = mode === 'draft' && projectHint && !activeProject && !tempMode
 
   // Auto-grow like native message composers, clamped to a max height.
   useEffect(() => {
@@ -523,7 +527,16 @@ export function Composer({
         {/* Stable slot above the textarea so the textarea never remounts when
             draft mode swaps to live mode. */}
         <div className="relative flex items-center gap-2">
-          {mode === 'draft' && (
+          {mode === 'draft' && tempMode && (
+            <div
+              className="flex items-center gap-1.5 rounded-md bg-tint-accent px-1.5 py-1 text-[13px] font-medium text-accent"
+              title={t('composer.tempChatTitle')}
+            >
+              <MessageCircle size={15} strokeWidth={1.75} className="shrink-0" />
+              <span>{t('composer.tempChat')}</span>
+            </div>
+          )}
+          {mode === 'draft' && !tempMode && (
             <Fragment>
               {/* Click-away catcher for the project menu. */}
               {projectMenuOpen && <div className="fixed inset-0 z-20" onClick={() => setProjectMenuOpen(false)} />}

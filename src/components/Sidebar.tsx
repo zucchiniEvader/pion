@@ -67,6 +67,9 @@ interface SidebarProps {
   onToggleBoard: () => void
   /** Opens a new-task draft for the given project; the runtime starts on first send. */
   onNewTaskForProject: (project: ProjectRecord) => void
+  /** Deletes a temp-chat session: removes its throwaway workspace (dir + PI
+   * session files) via projects.remove on the owning temp project. */
+  onDeleteTempSession: (session: SessionRecord) => void
   onRenameSession: (session: SessionRecord, name: string) => void
   /** Moves a tracked session into the archive group (registry only). */
   onArchiveSession: (session: SessionRecord) => void
@@ -110,6 +113,7 @@ export function Sidebar({
   boardReviewCount,
   onToggleBoard,
   onNewTaskForProject,
+  onDeleteTempSession,
   onRenameSession,
   onArchiveSession,
   onUnarchiveSession,
@@ -180,6 +184,15 @@ export function Sidebar({
   // down. The badge deep-links into Settings > Updates.
   const { t } = useI18n()
   const updateCheck = updateResult
+
+  // Temp chat workspaces (kind:'temp') are NOT projects: they render as a
+  // flat "临时会话" group after the project list, never inside it.
+  const normalProjects = projects.filter((p) => p.kind !== 'temp')
+  const tempProjects = projects.filter((p) => p.kind === 'temp')
+  const tempSessions = tempProjects
+    .flatMap((p) => (sessionsByPath[p.path] ?? []).filter((s) => (trackedFilesByPath[p.path] ?? []).includes(s.filePath)))
+    .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
+  const [tempOpen, setTempOpen] = useState(true)
 
   return (
     <aside className="flex h-full w-[300px] shrink-0 flex-col border-r border-line bg-panel">
@@ -318,7 +331,7 @@ export function Sidebar({
             </div>
           </div>
 
-          {projects.length === 0 ? (
+          {normalProjects.length === 0 ? (
             <button
               className="mx-1 mt-1 flex w-[calc(100%-8px)] flex-col items-start gap-1 rounded-lg border border-dashed border-line px-3 py-4 text-left text-xs text-ink2 transition-colors hover:bg-fill-hover"
               onClick={onPickProject}
@@ -328,7 +341,7 @@ export function Sidebar({
             </button>
           ) : (
             <ul className="space-y-0.5">
-              {projects.map((p) => {
+              {normalProjects.map((p) => {
                 const expanded = projectsOpen && expandedPaths.has(p.path)
                 const allTasks = sessionsByPath[p.path] ?? []
                 const tracked = new Set(trackedFilesByPath[p.path] ?? [])
@@ -531,6 +544,45 @@ export function Sidebar({
             </ul>
           )}
         </section>
+
+        {/* 临时会话：chat 模式的抛弃式工作区，平铺会话行；删除即清理
+            workspace + 对话记录（daemon projects.remove 对 kind:'temp' 的扩展）。 */}
+        {tempProjects.length > 0 && (
+          <section className="mt-4">
+            <button
+              className="mb-1 flex w-full items-center gap-1 pl-2 pr-0.5 text-[11px] font-semibold uppercase tracking-[0.07em] text-ink2 transition-colors hover:text-ink"
+              onClick={() => setTempOpen((v) => !v)}
+            >
+              <ChevronDown size={12} className={cn('transition-transform', !tempOpen && '-rotate-90')} />
+              {t('sidebar.tempChats')}
+              <span className="ml-auto tabular-nums">{tempSessions.length}</span>
+            </button>
+            {tempOpen && (
+              <ul className="space-y-0.5">
+                {tempSessions.length > 0 ? (
+                  tempSessions.map((s) => (
+                    <SessionRow
+                      key={s.id}
+                      session={s}
+                      active={s.filePath === activeSessionPath}
+                      spinning={sessionStatusByFile[s.filePath]?.running}
+                      waiting={sessionStatusByFile[s.filePath]?.waiting}
+                      unread={sessionStatusByFile[s.filePath]?.unread && !sessionStatusByFile[s.filePath]?.running}
+                      onOpen={onOpenSession}
+                      onRename={onRenameSession}
+                      onDelete={onDeleteTempSession}
+                      deleteLabel={t('sidebar.deleteTemp')}
+                      deleteHint={t('sidebar.deleteTempHint')}
+                      confirmDeleteLabel={t('sidebar.confirmDeleteTemp')}
+                    />
+                  ))
+                ) : (
+                  <span className="flex h-7 items-center gap-1.5 pl-2 text-xs text-ink2">{t('sidebar.noSessions')}</span>
+                )}
+              </ul>
+            )}
+          </section>
+        )}
       </OverlayScrollArea>
 
       <footer className="flex h-12 shrink-0 items-center gap-2.5 border-t border-line px-3">
@@ -581,6 +633,10 @@ const SessionRow = memo(function SessionRow({
   onRename,
   onArchive,
   onUnarchive,
+  onDelete,
+  deleteLabel,
+  deleteHint,
+  confirmDeleteLabel,
 }: {
   session: SessionRecord
   active: boolean
@@ -597,9 +653,15 @@ const SessionRow = memo(function SessionRow({
   onArchive?: (session: SessionRecord) => void
   /** Archived (non-app) session: promote back to the regular list. */
   onUnarchive?: (session: SessionRecord) => void
+  /** Present for temp-chat rows: irreversible delete (workspace + records). */
+  onDelete?: (session: SessionRecord) => void
+  deleteLabel?: string
+  deleteHint?: string
+  confirmDeleteLabel?: string
 }) {
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(session.title)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const { lang, t } = useI18n()
 
   const commit = () => {
@@ -625,6 +687,28 @@ const SessionRow = memo(function SessionRow({
           }}
           className="h-8 w-full rounded-md border-[0.5px] border-accent bg-canvas px-2 text-[13px] text-ink outline-none"
         />
+      </li>
+    )
+  }
+
+  if (confirmDelete) {
+    return (
+      <li>
+        <div className="flex h-8 items-center gap-1.5 rounded-md border-[0.5px] border-bad/30 bg-tint-bad px-1.5">
+          <span className="min-w-0 flex-1 truncate text-[11px] text-ink2" title={deleteHint}>{deleteHint}</span>
+          <button
+            className="shrink-0 rounded-md bg-bad px-2 py-1 text-[11px] font-medium text-white transition-opacity hover:opacity-90"
+            onClick={() => onDelete?.(session)}
+          >
+            {confirmDeleteLabel ?? t('sidebar.confirmDeleteTemp')}
+          </button>
+          <button
+            className="shrink-0 rounded-md px-2 py-1 text-[11px] text-ink2 transition-colors hover:bg-fill-hover hover:text-ink"
+            onClick={() => setConfirmDelete(false)}
+          >
+            {t('common.cancel')}
+          </button>
+        </div>
       </li>
     )
   }
@@ -691,6 +775,15 @@ const SessionRow = memo(function SessionRow({
                 >
                   <ArchiveRestore size={13} strokeWidth={1.75} className="shrink-0 text-ink2" />
                   {t('sidebar.unarchive')}
+                </ContextMenu.Item>
+              )}
+              {onDelete && (
+                <ContextMenu.Item
+                  className="flex cursor-default items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[13px] font-medium text-bad outline-none select-none data-highlighted:bg-tint-bad"
+                  onClick={() => setConfirmDelete(true)}
+                >
+                  <Trash2 size={13} strokeWidth={1.75} className="shrink-0" />
+                  {deleteLabel ?? t('sidebar.deleteTemp')}
                 </ContextMenu.Item>
               )}
             </ContextMenu.Popup>

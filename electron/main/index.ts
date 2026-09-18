@@ -268,11 +268,16 @@ function registerIpc(): void {
     route(projectPath).call('sessions.track', { projectPath, filePath }))
 
   ipcMain.handle(IPC.AGENT_START, async (_e, options: AgentStartOptions) => {
-    // Trust boundary: rebuild from known fields only. `extensions` is
-    // main-internal (kanban dispatch); the renderer can never attach one.
+    // Trust boundary: rebuild from known fields only. `extensions` and `_env`
+    // are main/daemon-internal (kanban dispatch, manager-mode bridge); the
+    // renderer can never attach them. `temp` (chat mode) is an allowlisted
+    // boolean: the daemon then creates the workspace, so a renderer-supplied
+    // projectPath is DROPPED — temp means "no project".
     const v = (options ?? {}) as unknown as Record<string, unknown>
-    if (typeof v.projectPath !== 'string' || !v.projectPath) throw new Error('projectPath must be a non-empty string')
-    const clean: AgentStartOptions = { projectPath: v.projectPath }
+    const temp = v.temp === true
+    if (!temp && (typeof v.projectPath !== 'string' || !v.projectPath)) throw new Error('projectPath must be a non-empty string')
+    const clean: AgentStartOptions = { projectPath: temp ? '' : (v.projectPath as string) }
+    if (temp) clean.temp = true
     if (typeof v.sessionPath === 'string' && v.sessionPath) clean.sessionPath = v.sessionPath
     if (typeof v.provider === 'string' && v.provider) clean.provider = v.provider
     if (typeof v.modelId === 'string' && v.modelId) clean.modelId = v.modelId

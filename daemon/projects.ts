@@ -4,12 +4,15 @@
 // Bodies were moved verbatim from electron/main/index.ts — same validation,
 // same error messages, same file formats. No electron imports: this module
 // is bundled into out/daemon/index.cjs (scripts/build-daemon.mjs).
-import { readFile, writeFile, readdir, mkdir, stat, open } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { readFile, writeFile, readdir, mkdir, stat, open, rm } from 'node:fs/promises'
+import { randomBytes } from 'node:crypto'
+import { homedir } from 'node:os'
+import { dirname, join, sep } from 'node:path'
 import type { ProjectRecord } from '../src/types'
 import type { RuntimeAttachment } from '../contracts/daemon-protocol'
 import type { DaemonServer } from './server'
 import { piSessionRoot, sessionBucket } from './sessions'
+import { stopRuntimesForProject } from './agent'
 
 // Set once at registration (daemon/index.ts boot, before any call is served).
 let userData = ''
@@ -59,6 +62,61 @@ async function addProject(path: string): Promise<ProjectRecord & RuntimeAttachme
   projects.push(record)
   await saveProjects(projects)
   return { ...record, runtime: 'local' }
+}
+
+// ── Temp chat workspaces (chat-mode sessions with no user project) ──
+// pi requires a CWD; a temp chat gets a fresh random dir, registered as
+// kind:'temp' so all the existing per-project plumbing (bucket scan,
+// app-session tracking, routing, sidebar lists) works unchanged. Removal
+// deletes the dir AND the PI session bucket — the conversation is throwaway
+// by design.
+// The root is FIXED at ~/.pion/tmp-workspaces (requirement: temp workspaces
+// live under .pion), NOT the daemon's --user-data: the desktop daemon's
+// user-data is Electron's app-support dir, while ~/.pion is the canonical
+// Pion home shared with the standalone CLI daemon. Each daemon host (local
+// vs ④ remote) resolves its own homedir, so remote temp chats stay remote.
+const TEMP_WORKSPACES_ROOT = join(homedir(), '.pion', 'tmp-workspaces')
+
+export function tempWorkspacesRoot(): string {
+  return TEMP_WORKSPACES_ROOT
+}
+
+/** True for paths inside the temp workspace root (cheap prefix check; all
+ * temp session starts/reopens are recognized without a registry read). */
+export function isTempWorkspacePath(path: string): boolean {
+  const root = tempWorkspacesRoot()
+  return !!root && path.startsWith(root + sep)
+}
+
+/** Creates a fresh temp workspace dir and registers it as kind:'temp'. */
+export async function createTempWorkspace(): Promise<string> {
+  const dir = join(tempWorkspacesRoot(), `chat-${randomBytes(6).toString('hex')}`)
+  await mkdir(dir, { recursive: true })
+  const projects = await loadProjects()
+  projects.push({
+    id: dir,
+    name: dir.split('/').pop() || dir,
+    path: dir,
+    lastOpenedAt: new Date().toISOString(),
+    kind: 'temp',
+  })
+  await saveProjects(projects)
+  return dir
+}
+
+// Board index consumed by the kanban-bridge in manager mode: the model may
+// only address boards BY NAME, and the name→file mapping comes exclusively
+// from this daemon-written file (never from model input). Refreshed at boot
+// and on every project add/remove; a missing file degrades to the unassigned
+// board only.
+// ponytail: name collisions between projects resolve to the first match;
+// disambiguate via path matching when that ever bites.
+async function writeKanbanBoardsIndex(): Promise<void> {
+  const projects = (await loadProjects()).filter((p) => p.kind !== 'temp')
+  await writeJson(join(userData, 'kanban', 'boards.json'), {
+    v: 1,
+    projects: projects.map((p) => ({ name: p.name, path: p.path })),
+  })
 }
 
 /** File names of the project's own PI extensions, if any. */
@@ -181,7 +239,7 @@ async function discoverProjects(): Promise<string[]> {
     }
     if (!newest) continue
     const cwd = await readSessionCwd(newest.file)
-    if (cwd) found.push({ path: cwd, mtimeMs: newest.mtimeMs })
+    if (cwd && !isTempWorkspacePath(cwd)) found.push({ path: cwd, mtimeMs: newest.mtimeMs })
   }
   found.sort((a, b) => b.mtimeMs - a.mtimeMs)
   return [...new Set(found.map((f) => f.path))]
@@ -189,6 +247,9 @@ async function discoverProjects(): Promise<string[]> {
 
 export function registerProjectMethods(server: DaemonServer, userDataDir: string): void {
   userData = userDataDir
+  // Board index for the bridge's manager mode: written once at boot so a
+  // temp chat started before any project change still sees every board.
+  void writeKanbanBoardsIndex()
   server.register('projects.list', async () =>
     (await loadProjects()).map((p) => ({ ...p, runtime: 'local' as const })),
   )
@@ -196,12 +257,15 @@ export function registerProjectMethods(server: DaemonServer, userDataDir: string
     const { path } = params as { path: string }
     const record = await addProject(path)
     await adoptExistingSessions(path)
+    await writeKanbanBoardsIndex()
     return record
   })
   server.register('projects.remove', async (params) => {
     const { id } = params as { id: string }
-    const projects = (await loadProjects()).filter((p) => p.id !== id)
-    await saveProjects(projects)
+    const projects = await loadProjects()
+    const removed = projects.find((p) => p.id === id)
+    const filtered = projects.filter((p) => p.id !== id)
+    await saveProjects(filtered)
     // Drop the removed project's session registry so it cannot resurface.
     const registry = await loadAppSessions()
     if (registry[id]) {
@@ -211,6 +275,15 @@ export function registerProjectMethods(server: DaemonServer, userDataDir: string
     // Stop the kanban watcher of the removed project; .pion/ in the user's
     // project stays untouched (hook → daemon/kanban.ts stopKanbanStore).
     onProjectRemoved?.(id)
+    // Temp workspaces are throwaway BY DESIGN: stop any live runtimes on the
+    // dir first (deleting the CWD under a running pi leaves a zombie), then
+    // remove the workspace dir and the PI session bucket (its conversation).
+    if (removed?.kind === 'temp') {
+      await stopRuntimesForProject(removed.path)
+      await rm(removed.path, { recursive: true, force: true }).catch(() => undefined)
+      await rm(join(piSessionRoot(), sessionBucket(removed.path)), { recursive: true, force: true }).catch(() => undefined)
+    }
+    await writeKanbanBoardsIndex()
     return null
   })
   server.register('projects.extensions', async (params) => {

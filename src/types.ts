@@ -239,6 +239,11 @@ export interface ProjectRecord {
   name: string
   path: string
   lastOpenedAt: string
+  /** 'temp' = ephemeral chat workspace (random dir under ~/.pion/tmp-workspaces):
+   * hidden from the normal project list/kanban/discover, shown in the
+   * sidebar's temp-chat group; removal also deletes the workspace dir and
+   * its PI session files. Absent on normal projects. */
+  kind?: 'temp'
   /** ④: owning runtime id ('local' or a settings runtime id), assigned by the
    * main proxy from the serving connection; absent on pre-v2 records. */
   runtime?: string
@@ -491,6 +496,10 @@ export interface PromptImage {
 
 export interface AgentStartOptions {
   projectPath: string
+  /** Temp chat session: daemon creates a random workspace under
+   * ~/.pion/tmp-workspaces, registers it as kind:'temp', and attaches the
+   * kanban-bridge in manager mode. projectPath may be empty when set. */
+  temp?: boolean
   sessionPath?: string
   provider?: string
   modelId?: string
@@ -501,6 +510,10 @@ export interface AgentStartOptions {
    * dispatch passes the bundled kanban-bridge here.
    */
   extensions?: string[]
+  /** Daemon-internal only: extra pi child env (manager-mode bridge flags,
+   * e.g. PION_KANBAN_MODE/PION_DATA_DIR). Never renderer-settable — main's
+   * AGENT_START trust boundary drops it. */
+  _env?: Record<string, string>
 }
 
 // ──────────────────────────────────────────────────────────────────────────

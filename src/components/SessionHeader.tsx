@@ -243,13 +243,17 @@ export function SessionHeader({ sidebarOpen, onOpenSidebar, navBack, navForward,
         <div className="flex min-w-0 flex-1 items-center gap-2.5">
           <h1 className="truncate text-[13px] font-semibold" title={title}>{capTitle(title)}</h1>
           {/* 静态项目 chip:仅展示,不响应点击。标题回退为项目名时隐藏,
-              避免同一个名字以两种字号并排出现。 */}
-          {title !== project.name && (
-            <div className={cn(chip, 'hidden cursor-default sm:flex')} title={project.path}>
-              <FolderOpen size={12} strokeWidth={1.75} />
-              <span className="max-w-[160px] truncate">{project.name}</span>
-            </div>
-          )}
+              避免同一个名字以两种字号并排出现。临时会话显示固定标签
+              而非随机目录名。 */}
+          {(() => {
+            const label = project.kind === 'temp' ? t('temp.label') : project.name
+            return title !== label ? (
+              <div className={cn(chip, 'hidden cursor-default sm:flex')} title={project.path}>
+                <FolderOpen size={12} strokeWidth={1.75} />
+                <span className="max-w-[160px] truncate">{label}</span>
+              </div>
+            ) : null
+          })()}
           {overview?.isRepo && (
             <span className="relative hidden sm:block">
               <button
@@ -395,7 +399,7 @@ export function SessionHeader({ sidebarOpen, onOpenSidebar, navBack, navForward,
           )}
         </span>
       )}
-      {project && (
+      {project && project.kind !== 'temp' && (
         <button
           className={cn(chip, 'no-drag hover:bg-fill-hover hover:text-ink', changesOpen && 'bg-fill-active text-ink')}
           title={t('header.changes')}

@@ -204,8 +204,12 @@ function asKanbanAssignInput(input: unknown): KanbanAssignInput {
 function asAgentStartOptions(options: unknown): AgentStartOptions {
   if (!options || typeof options !== 'object') throw new TypeError('options must be an object')
   const v = options as Record<string, unknown>
+  // `temp` (chat mode) is allowlisted: projectPath may then be empty — the
+  // daemon creates the workspace.
+  const temp = v.temp === true
   return {
-    projectPath: assertNonEmptyString(v.projectPath, 'projectPath'),
+    projectPath: temp ? '' : assertNonEmptyString(v.projectPath, 'projectPath'),
+    ...(temp ? { temp: true } : {}),
     ...(v.sessionPath !== undefined ? { sessionPath: assertString(v.sessionPath, 'sessionPath') } : {}),
     ...(v.provider !== undefined ? { provider: assertString(v.provider, 'provider', 100) } : {}),
     ...(v.modelId !== undefined ? { modelId: assertString(v.modelId, 'modelId', 200) } : {}),

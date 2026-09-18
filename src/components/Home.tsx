@@ -1,4 +1,4 @@
-import { Bug, ClipboardList, Coffee, Presentation } from 'lucide-react'
+import { Bug, ClipboardList, Coffee, MessageCircle, Presentation } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useI18n, type TFn } from '@/i18n'
 import type { MsgKey } from '@/i18n/zh'
@@ -10,6 +10,8 @@ interface HomeProps {
   onRestore: () => void
   /** Starter chip click: prefill the composer draft and focus it. */
   onStarter: (prompt: string) => void
+  /** 临时聊天: open a project-less chat draft (temp workspace + kanban tools). */
+  onTempChat: () => void
 }
 
 // One-click drafts; clicking fills the composer rather than auto-sending.
@@ -33,7 +35,7 @@ function timeGreeting(t: TFn): string {
 // Home hero: greeting + starter chips centered in the space above the
 // composer. There is no input here on purpose — the composer is a separate,
 // always-present element docked at the bottom of the session view.
-export function Home({ crashed, onRestore, onStarter }: HomeProps) {
+export function Home({ crashed, onRestore, onStarter, onTempChat }: HomeProps) {
   const { t } = useI18n()
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
@@ -68,6 +70,16 @@ export function Home({ crashed, onRestore, onStarter }: HomeProps) {
                 </button>
               ))}
             </div>
+
+            {/* 临时聊天入口：chat 模式，不选项目。 */}
+            <button
+              className="relative mt-3 flex items-center gap-1.5 rounded-xl border-[0.5px] border-accent/40 bg-tint-accent px-3 py-1.5 text-xs font-medium text-accent transition-colors hover:bg-accent/15"
+              title={t('home.tempChatTitle')}
+              onClick={onTempChat}
+            >
+              <MessageCircle size={13} strokeWidth={1.75} />
+              {t('home.tempChat')}
+            </button>
           </>
         )}
       </div>

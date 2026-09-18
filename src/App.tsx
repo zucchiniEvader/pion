@@ -21,7 +21,7 @@ import { BoardView } from '@/components/kanban/BoardView'
 import { useAllKanbanBoards } from '@/hooks/useAllKanbanBoards'
 import { useUpdateCheck } from '@/hooks/useUpdateCheck'
 import { isPiOutdated } from '@/lib/piVersion'
-import { useUserErrorMessage } from '@/i18n'
+import { useUserErrorMessage, useI18n } from '@/i18n'
 
 // First-run onboarding (docs/onboarding-design.md §2): the welcome screen shows
 // once per client install. Client-local UI preference, same layer as
@@ -39,6 +39,7 @@ function welcomeSeen(): boolean {
 
 export default function App() {
   const ue = useUserErrorMessage()
+  const { t } = useI18n()
   const [meta, setMeta] = useState<AppMeta | null>(null)
   // Boot gate: verify the PI environment before the main UI mounts; a machine
   // without pi is held on the setup guide, and the first launch that finds pi
@@ -56,11 +57,14 @@ export default function App() {
   const [mainView, setMainView] = useState<'session' | 'board' | 'scheduler'>('session')
   const [elapsedSec, setElapsedSec] = useState(0)
   const pool = useSessionPool()
+  // Temp chat projects (kind:'temp') ride the same list; board/scheduler
+  // surfaces and the kanban aggregate only ever see real projects.
+  const nonTempProjects = useMemo(() => projects.filter((p) => p.kind !== 'temp'), [projects])
   // Aggregated board data lives here (single owner): the sidebar's review
   // badge and the board view share one subscription — preload dispatches each
   // push channel to the LATEST subscriber only, so a second hook instance
   // would steal BoardView's live updates.
-  const kanbanBoards = useAllKanbanBoards(projects)
+  const kanbanBoards = useAllKanbanBoards(nonTempProjects)
   const active = pool.activeSession
 
   // ④ remote runtimes: single subscriber — preload dispatches each push
@@ -236,6 +240,7 @@ export default function App() {
     // A draft prewarmed for another project is stale; drop it so the effect
     // below prewarms for the newly selected one.
     prewarmRef.current = null
+    setTempDraft(false)
     setActiveProject(project)
     // Always refresh (not just when uncached) so the main process moves its
     // session watcher to the newly selected project.
@@ -244,7 +249,8 @@ export default function App() {
 
   const openSession = useCallback(async (session: SessionRecord) => {
     setMainView('session')
-    setComposingNew(false)    // Already live in the pool: just switch foreground, never restart it.
+    setComposingNew(false)
+    setTempDraft(false)    // Already live in the pool: just switch foreground, never restart it.
     for (const [rid, s] of pool.sessions) {
       if (s.runtime?.sessionFile === session.filePath) {
         pool.switchActive(rid)
@@ -272,6 +278,10 @@ export default function App() {
   // home surface and the PI runtime is NOT spawned until the first message
   // is actually sent (lazy start keeps new-task entry instant).
   const [composingNew, setComposingNew] = useState(false)
+  // True while that draft is a 临时聊天 (chat mode): no project, temp
+  // workspace on first send, composer shows the chat badge instead of the
+  // project selector.
+  const [tempDraft, setTempDraft] = useState(false)
   // The optimistic first message of a draft send: while the PI runtime
   // spawns, the session page (user bubble + starting composer) is already on
   // screen instead of a standalone loading page.
@@ -298,6 +308,7 @@ export default function App() {
     // missing project left the user stranded on the board (nothing visibly
     // happened). Always open the draft surface; without a project the
     // composer's selector gets the hint, and sending still requires one.
+    setTempDraft(false)
     if (!activeProject) setProjectNudge((n) => n + 1)
     // A prewarm parked from an earlier stay on the home surface belongs to
     // that visit: while it sits in prewarmRef the prewarm effect is blocked
@@ -389,6 +400,59 @@ export default function App() {
     }
   }, [activeProject, composingNew, active, pool, refreshSessions])
 
+  // 临时聊天 draft (chat mode): same lazy-start shape as new-task, but no
+  // project — the composer shows the chat badge, and the first send creates
+  // the temp workspace daemon-side.
+  const startTempDraft = useCallback(() => {
+    prewarmRef.current = null
+    setTempDraft(true)
+    setActiveProject(null)
+    setMainView('session')
+    setComposingNew(true)
+    setComposerFocus((k) => k + 1)
+  }, [])
+
+  // First send of a temp chat: the daemon creates the random workspace under
+  // ~/.pion/tmp-workspaces and registers it (kind:'temp') during the start;
+  // adopt that record as the active project BEFORE dispatching so the
+  // transcript surface mounts while the reply streams (the render guard keys
+  // on activeProject). Manager-mode kanban tools are attached daemon-side.
+  const startTempChat = useCallback(async (text: string, images: PromptImage[] = []): Promise<boolean> => {
+    setStartingMessage({ text, images })
+    setComposingNew(false)
+    setTempDraft(false)
+    let info: RuntimeInfo | null = null
+    try {
+      const started = await pool.start({ projectPath: '', temp: true })
+      info = started
+      // Stop clicked while spawning: don't send; recycle the fresh runtime
+      // and let the composer restore the draft text (false → restore).
+      if (cancelStartRef.current) {
+        cancelStartRef.current = false
+        void pool.stop(started.runtimeId)
+        return false
+      }
+      const cwd = started.cwd
+      const list = await window.pi.projects.list().catch(() => [] as ProjectRecord[])
+      setProjects(list)
+      setActiveProject(
+        list.find((p) => p.path === cwd) ?? {
+          id: cwd,
+          name: cwd.split('/').pop() || cwd,
+          path: cwd,
+          lastOpenedAt: new Date().toISOString(),
+          kind: 'temp',
+        },
+      )
+      await pool.send(info.runtimeId, text, 'prompt', images)
+      return true
+    } finally {
+      setStartingMessage(null)
+      // The session file only exists once the runtime has started; list after.
+      if (info) void refreshSessions(info.cwd)
+    }
+  }, [pool, refreshSessions])
+
   // Prewarm whenever the home surface is up with a project selected — the
   // landing page after picking a project, not just an explicit new-task
   // draft. The draft's PI runtime starts in the background so the
@@ -420,6 +484,7 @@ export default function App() {
     // (prewarmInFlight guard) while its draft never matches this project —
     // drop it like openProject does so this project gets its own prewarm.
     prewarmRef.current = null
+    setTempDraft(false)
     setActiveProject(project)
     setMainView('session')
     setComposingNew(true)
@@ -499,6 +564,13 @@ export default function App() {
     await refreshProjects()
   }, [activeProject, refreshProjects])
 
+  // 临时会话删除：单位是临时工作区（一个 temp 项目）——daemon 停掉它的
+  // runtime、删 workspace 目录与 PI 会话 bucket（对话是抛弃式的）。
+  const deleteTempSession = useCallback(async (session: SessionRecord) => {
+    const project = projects.find((p) => p.path === session.projectPath && p.kind === 'temp')
+    if (project) await removeProject(project)
+  }, [projects, removeProject])
+
   const activeSessions = activeProject ? sessionsByPath[activeProject.path] ?? [] : []
   // A new-task draft is not "viewing" the previous session: it keeps running
   // in the pool, but the title drops to the project name and the sidebar
@@ -574,7 +646,7 @@ export default function App() {
     if (file) sessionStatusByFile[file] = { running: s.status === 'running', unread: s.unread, waiting: s.status === 'running' && s.interactive.length > 0 }
   }
   const activeRecord = activeSessions.find((s) => s.filePath === activeSessionPath)
-  const title = activeRecord?.title || activeProject?.name || ''
+  const title = activeRecord?.title || (activeProject?.kind === 'temp' ? t('temp.label') : activeProject?.name) || ''
 
   const pendingRuntimeId = active?.runtime && !composingNew ? active.runtime.runtimeId : null
   const pendingRequest = pendingRuntimeId ? active?.interactive[0] : undefined
@@ -667,6 +739,7 @@ export default function App() {
         setDraft(prompt)
         setComposerFocus((k) => k + 1)
       }}
+      onTempChat={startTempDraft}
     />
   )
 
@@ -735,6 +808,7 @@ export default function App() {
           boardReviewCount={kanbanBoards.allCards.filter((c) => c.status === 'review' && !c.archived).length}
           onToggleBoard={() => setMainView((v) => (v === 'board' ? 'session' : 'board'))}
           onNewTaskForProject={(p) => void newTaskForProject(p)}
+          onDeleteTempSession={(s) => void deleteTempSession(s)}
           onRenameSession={renameSession}
           onArchiveSession={archiveSession}
           onUnarchiveSession={unarchiveSession}
@@ -767,9 +841,9 @@ export default function App() {
         )}
 
         {mainView === 'board' ? (
-          <BoardView projects={projects} runtimes={runtimes} kanban={kanbanBoards} onViewSession={jumpToSession} />
+          <BoardView projects={nonTempProjects} runtimes={runtimes} kanban={kanbanBoards} onViewSession={jumpToSession} />
         ) : mainView === 'scheduler' ? (
-          <SchedulerPage projects={projects} defaultProjectPath={activeProject?.path ?? null} onViewSession={jumpToSession} />
+          <SchedulerPage projects={nonTempProjects} defaultProjectPath={activeProject?.kind === 'temp' ? null : activeProject?.path ?? null} onViewSession={jumpToSession} />
         ) : (
           <>
         {homeHero}
@@ -828,6 +902,7 @@ export default function App() {
               contextUsage={active?.contextUsage ?? null}
               draft={draft}
               onDraftChange={setDraft}
+              tempMode={tempDraft}
               onSend={(text, intent, images) => {
                 if (!composingNew && active?.runtime) {
                   return pool.send(active.runtime.runtimeId, text, intent, images).then(() => true)
@@ -842,7 +917,7 @@ export default function App() {
                     .then((info) => pool.send(info.runtimeId, text, resumeIntent, images))
                     .then(() => true)
                 }
-                return startFromHome(text, images)
+                return tempDraft ? startTempChat(text, images) : startFromHome(text, images)
               }}
               onAbort={() => {
                 if (active?.runtime) void pool.abort(active.runtime.runtimeId)

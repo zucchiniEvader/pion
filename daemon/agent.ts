@@ -14,6 +14,8 @@ import { join } from 'node:path'
 import type { AgentStartOptions, PiEvent, PiEventEnvelope, RpcCommand, RpcResponse, RuntimeInfo } from '../src/types'
 import { PiRpcRuntime, detectPi, invalidatePiDetection, isExtensionLoadFailure } from './pi-rpc'
 import { piSessionRoot, sessionBucket, trackSession } from './sessions'
+import { createTempWorkspace, isTempWorkspacePath } from './projects'
+import { kanbanBridgePath } from './kanban'
 import { DaemonRpcError, type DaemonServer } from './server'
 
 const runtimes = new Map<string, PiRpcRuntime>()
@@ -30,6 +32,10 @@ const pendingStarts = new Map<string, Promise<RuntimeInfo>>()
 // `/reload` command, which pi's TUI keeps built-in and RPC mode never sees.
 // Resolved once at boot from the --resources dir; missing file = run without it.
 let pionCommandsPath: string | null = null
+
+// Daemon user-data (registerAgentMethods): temp workspace root + the
+// PION_DATA_DIR the manager-mode bridge resolves its board index from.
+let userDataDir = ''
 
 /** Stops the least-recently-used pooled runtimes over the limit. */
 function evictIdleRuntimes(keepId: string): void {
@@ -154,6 +160,9 @@ async function discardPrewarm(id: string): Promise<void> {
 
 /** Boots a blank prewarm for the project if none is waiting (fire-and-forget). */
 export async function ensurePrewarm(projectPath: string): Promise<void> {
+  // Temp workspaces never prewarm: each is a one-session throwaway dir, a
+  // parked blank runtime there is a wasted pool slot.
+  if (isTempWorkspacePath(projectPath)) return
   for (const [, p] of prewarmed) if (p.projectPath === projectPath) return
   if (prewarmInFlight.has(projectPath)) return
   prewarmInFlight.add(projectPath)
@@ -253,7 +262,7 @@ async function spawnRuntime(
       onExit: (exited) => {
         if (passthrough) callbacks.onExit(exited)
       },
-    })
+    }, options._env)
     return {
       runtime,
       async settle(): Promise<{ runtime: PiRpcRuntime; info: RuntimeInfo }> {
@@ -279,7 +288,26 @@ async function spawnRuntime(
   }
 }
 
-export async function startRuntime(options: AgentStartOptions): Promise<RuntimeInfo> {
+export async function startRuntime(input: AgentStartOptions): Promise<RuntimeInfo> {
+  let options = input
+  // Temp chat (chat mode): the renderer has no workspace to name; the daemon
+  // creates the random dir under <userData>/tmp-workspaces and registers it.
+  if (options.temp) {
+    options = { ...options, projectPath: await createTempWorkspace() }
+  }
+  // EVERY start on a temp workspace carries the manager bridge — including
+  // reopens (projectPath = the temp dir, no temp flag), so a temp session can
+  // never lose its kanban tools. The bridge resolves boards BY NAME from the
+  // daemon-written index under PION_DATA_DIR; env never crosses the wire from
+  // the renderer (main's trust boundary strips _env like extensions).
+  if (isTempWorkspacePath(options.projectPath)) {
+    const bridge = kanbanBridgePath()
+    options = {
+      ...options,
+      extensions: bridge ? [...(options.extensions ?? []), bridge] : (options.extensions ?? []),
+      _env: { ...(options._env ?? {}), PION_KANBAN_MODE: 'manager', PION_DATA_DIR: userDataDir },
+    }
+  }
   // Follow the bucket this runtime writes to so its session list stays live.
   watchProjectSessions(options.projectPath)
   // Serialize concurrent starts for the same session (double-click, rapid
@@ -301,8 +329,14 @@ async function performStart(options: AgentStartOptions): Promise<RuntimeInfo> {
   if (options.sessionPath) {
     // Dispatch (extensions requested) needs a bridge-carrying runtime; a
     // pooled runtime started without -e can never report, so it is not reused.
+    // EXCEPT temp workspaces: every temp start carries the SAME manager bridge
+    // (injected in startRuntime), so a pooled temp runtime is always
+    // bridge-carrying — refusing reuse would make reopening a live temp
+    // session die on the single-writer guard below.
     const existingId = sessionRuntimeByFile.get(options.sessionPath)
-    const existing = existingId && !options.extensions?.length ? runtimes.get(existingId) : undefined
+    const existing = existingId && (!options.extensions?.length || isTempWorkspacePath(options.projectPath))
+      ? runtimes.get(existingId)
+      : undefined
     if (existing) {
       // Re-attach: PI has kept running this session in the background. A
       // fresh get_state is the authoritative streaming/model snapshot — the
@@ -525,8 +559,9 @@ export async function commandRuntime(runtimeId: string, command: RpcCommand): Pr
   return runtime.command(command)
 }
 
-export function registerAgentMethods(server: DaemonServer, resources?: string): void {
+export function registerAgentMethods(server: DaemonServer, resources?: string, userData?: string): void {
   broadcastAgentEvent = (envelope) => server.broadcast('agent.event', envelope)
+  if (userData) userDataDir = userData
   if (resources) {
     const candidate = join(resources, 'pion-commands.ts')
     if (existsSync(candidate)) pionCommandsPath = candidate
@@ -556,6 +591,14 @@ export function registerAgentMethods(server: DaemonServer, resources?: string): 
     return runtime.stop()
   })
   server.register('agent.list', async () => [...runtimes.values()].map((rt) => rt.snapshot()))
+}
+
+/** Stops every live runtime whose CWD is the given project. Temp workspace
+ * removal runs this before deleting the dir — deleting the CWD under a
+ * running pi leaves a zombie writer on a vanished path. */
+export async function stopRuntimesForProject(projectPath: string): Promise<void> {
+  const victims = [...runtimes.values()].filter((rt) => rt.snapshot().cwd === projectPath)
+  await Promise.allSettled(victims.map((rt) => rt.stop()))
 }
 
 /** Kanban hooks (daemon/kanban.ts): crash-marking reset when a session
