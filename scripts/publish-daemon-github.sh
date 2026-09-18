@@ -1,5 +1,8 @@
 #!/bin/sh
-# Publishes the pion-daemon installer as ONE GitHub Release asset:
+# MANUAL FALLBACK: the release workflow (.github/workflows/release.yml
+# daemon-assets job) normally uploads install.sh on every v* tag. Use this
+# script only to (re)publish the daemon installer outside a release —
+# e.g. patching the installer on the current latest release.
 #
 #   curl -fsSL https://github.com/<owner>/<repo>/releases/latest/download/install.sh | sh
 #

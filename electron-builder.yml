@@ -30,7 +30,11 @@ extraResources:
     to: pion-daemon.cjs
 npmRebuild: false
 # 应用内升级(electron-updater):打包时据此生成 Resources/app-update.yml。
-# 发版:npm version x.y.z && git push --follow-tags && GH_TOKEN=... npm run dist -- --publish always
+# 发版只需推 tag:npm version x.y.z && git push --follow-tags —— .github/workflows/
+# release.yml 在 CI 上构建、签名、公证、创建 Release 并上传全部资产(含
+# daemon 的 install.sh)。本地 npm run dist 仅用于验证产物,不要本地 publish
+# (CI 产物带公证,本地产物会被 Gatekeeper 拦;且 CI 的 Release 先建,
+# 本地 publish 只会报 existing type not compatible 白跑一趟)。
 publish:
   provider: github
   owner: zucchiniEvader
